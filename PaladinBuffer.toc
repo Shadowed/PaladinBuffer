@@ -1,0 +1,20 @@
+## Interface: 30000
+## Title: Paladin Buffer
+## Notes: Simplifies Paladin greater and single blessings inside raids
+## Author: Mayen
+## SavedVariables: PaladinBuffDB
+
+libs\LibStub-1.0\LibStub-1.0.xml
+libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+libs\AceAddon-3.0\AceAddon-3.0.xml
+libs\AceEvent-3.0\AceEvent-3.0.xml
+libs\AceDB-3.0\AceDB-3.0.xml
+libs\AceDBOptions-3.0\AceDBOptions-3.0.xml
+libs\AceGUI-3.0\AceGUI-3.0.xml
+libs\AceConfig-3.0\AceConfig-3.0.xml
+libs\AceComm-3.0\AceComm-3.0.xml
+
+localization.enUS.lua
+
+PaladinBuffer.lua
+sync.lua
