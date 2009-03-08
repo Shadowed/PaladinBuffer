@@ -2,7 +2,7 @@
 ## Title: Paladin Buffer
 ## Notes: Simplifies Paladin greater and single blessings inside raids
 ## Author: Mayen
-## SavedVariables: PaladinBuffDB
+## SavedVariables: PaladinBufferDB
 
 libs\LibStub-1.0\LibStub-1.0.xml
 libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
@@ -17,4 +17,6 @@ libs\AceComm-3.0\AceComm-3.0.xml
 localization.enUS.lua
 
 PaladinBuffer.lua
+assignments.lua
+assigngui.lua
 sync.lua

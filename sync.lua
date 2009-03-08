@@ -1,66 +1,108 @@
 if( not PaladinBuffer ) then return end
 
 local Sync = PaladinBuffer:NewModule("Sync", "AceEvent-3.0", "AceComm-3.0")
-local classList
+local classList, timerFrame
+local supportsPP, requestThrottle = {}, {}
 local playerName = UnitName("player")
+local THROTTLE_TIME = 5
 
 function Sync:OnInitialize()
+	if( PaladinBuffer.disabled ) then return end
+
 	self:RegisterEvent("CHAT_MSG_ADDON")
 	self.RegisterComm(self, "PALB")
 
 	classList = PaladinBuffer.classList
 end
 
---[[
-Paladin Buffer sync format
-
-REQUEST
- Give me data on assignments
- 
-ASSIGN: <name 1>:<assignment 1>:<skill 1>;<name 2>:<assignment 2>:<skill 3>
- Assign someone to cast that <skill> on <assignment> which means it can either be a class or player
-
-MYASSIGN: <spell 1>,<rank 1>:<spell 2>,<rank 2>;<class 1>,<spell 1>:<target 1>,<spell 1>
- Sends data about the spells you have, if they are improved.
- What classes you are assigned to
- As well as the single blessings you were assigned
-
-I honestly can't see myself using these last two, but it's easier to remove comm code than add it.
-
-SYMREQUEST
- Request total number of Symbols
- 
-SYMBOLS: #
- Total number of Symbols you have
-  
-CLEAR
- Clears the assignments
-]]
+function Sync:RequestData()
+	-- Request data from PaladinBuffer users
+	self:SendMessage("REQUEST: " .. tostring(PaladinBuffer.db.profile.ppSupport))
+	
+	-- Request data from Pally Power users
+	-- will do a small 0.5 delay so that PB users will see that they should ignore any syncs that are sent as compats
+	if( PaladinBuffer.db.profile.ppSupport ) then
+		local timeElapsed = 0
+		if( not timerFrame ) then
+			timerFrame = CreateFrame("Frame")
+			timerFrame:SetScript("OnUpdate", function(self, elapsed)
+				timeElapsed = timeElapsed - elapsed
+				
+				if( timeElapsed <= 0 ) then
+					Sync:SendMessage("REQ", "PLPRW")
+					self:Hide()
+				end
+			end)
+		end
+		
+		timeElapsed = 0.5
+		timerFrame:Show()
+	end
+end
 
 -- SENDING SYNC DATA
+function Sync:SendAssignments()
+	-- RASSIGN: Selari~WARRIOR,gmight:PRIEST,gkings:Distomia,wisdom;Distomia~WARRIOR,gkings:PRIEST,gwisdom	local assignText
+	local assignText
+	for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
+		local text
+		for target, spellToken in pairs(assignments) do
+			if( spellToken ~= "none" ) then
+				if( text ) then	
+					text = string.format("%s:%s,%s", text, target, spellToken)
+				else
+					text = string.format("%s,%s", target, spellToken)
+				end
+			end
+		end
+		
+		if( text ) then
+			if( assignText ) then
+				assignText = string.format("%s;%s~%s", assignText, name, text)
+			else
+				assignText = string.format("%s~%s", name, text)
+			end
+		end
+	end
+	
+	-- Off we go!
+	if( assignText ) then
+		self:SendMessage(string.format("RASSIGN: %s", assignText))
+	end
+	
+	-- Send assignments out in a PP format
+	if( PaladinBuffer.db.profile.ppSupport ) then
+		self:SendPPAssignments()
+	end
+end
+
 function Sync:SendPersonalAssignment()
 	-- Compile the list of what we have trained/talented
 	local talentList
 	for spellToken, rank in pairs(PaladinBuffer.db.profile.blessings[playerName]) do
-		if( talentList ) then
-			talentList = string.format("%s:%s,%s", talentList, spellToken, rank)
-		else
-			talentList = string.format("%s,%s", spellToken, rank)
+		if( rank ~= "none" ) then
+			if( talentList ) then
+				talentList = string.format("%s:%s,%s", talentList, spellToken, rank)
+			else
+				talentList = string.format("%s,%s", spellToken, rank)
+			end
 		end
 	end
 	
 	-- Compile a list of our assignments (If any)
 	local assignList
 	for assignment, spellToken in pairs(PaladinBuffer.db.profile.assignments[playerName]) do
-		if( assignList ) then
-			assignList = string.format("%s:%s,%s", assignList, assignment, spellToken)
-		else
-			assignList = string.format("%s,%s", assignment, spellToken)
+		if( spellToken ~= "none" ) then
+			if( assignList ) then
+				assignList = string.format("%s:%s,%s", assignList, assignment, spellToken)
+			else
+				assignList = string.format("%s,%s", assignment, spellToken)
+			end
 		end
 	end
 	
 	-- Send it off
-	self:SendMessage(string.format("%s;%s", talentList or "", assignList or ""))
+	self:SendMessage(string.format("MYDATA: %s;%s", (talentList or ""), (assignList or "")))
 end
 
 -- PARSING SYNC DATA
@@ -68,9 +110,9 @@ function Sync:ParseTalents(sender, ...)
 	for i=1, select("#", ...) do
 		local spell, rank = string.split(",", (select(i, ...)))
 		rank = tonumber(rank)
-
-		if( spell and rank and PaladinBuffer:GetBlessingType(spell) ) then
-			PaladinBuffer:SetBlessingsData(sender, spell, rank)	
+		
+		if( spell and rank and PaladinBuffer.blessingTypes[spell] ) then
+			PaladinBuffer:SetBlessingData(sender, spell, rank)	
 		end
 	end
 end
@@ -78,35 +120,77 @@ end
 function Sync:ParseAssignments(sender, ...)
 	for i=1, select("#", ...) do
 		local assignment, spell = string.split(",", (select(i, ...)))
-		if( assignment and spell and PaladinBuffer:GetBlessingType(spell) ) then
-			PaladinBuffer:AssignBlessing(sender, spell, assignment)
+		if( assignment and spell ) then
+			if( spell == "none" and not classList[assignment] ) then
+				spell = nil
+			end
+			
+			-- Validate it, don't let a player get assigned a greater blessing and don't let a class be assigned a single blessing
+			if( not spell or spell == "none" or ( classList[assignment] and PaladinBuffer.blessingTypes[spell] == "greater" ) or ( not classList[assignment] and PaladinBuffer.blessingTypes[spell] == "single" ) ) then
+				PaladinBuffer:AssignBlessing(sender, spell, assignment)
+			end
+		end
+	end
+end
+
+-- RASSIGN: Selari~WARRIOR,gmight:PRIEST,gkings:Distomia,wisdom;Distomia~WARRIOR,gkings:PRIEST,gwisdom
+function Sync:ParsePlayerAssignments(reset, ...)
+	for i=1, select("#", ...) do
+		local name, assignments = string.split("~", (select(i, ...)))
+		if( name and assignments ) then
+			if( reset ) then
+				PaladinBuffer:ClearAssignments(name)
+			end
+			
+			self:ParseAssignments(name, string.split(":", assignments))
 		end
 	end
 end
 
 -- RECEIVED SYNC DATA
 function Sync:OnCommReceived(prefix, msg, type, sender)
-	local cmd, arg = string.match(msg, "([a-zA-Z+]): (.+)")
+	local cmd, arg = string.match(msg, "([a-zA-Z+]+): (.+)")
 	if( not cmd or not arg ) then
 		cmd = msg
 	elseif( arg ) then
 		arg = string.trim(arg)
 	end
-	
+		
 	-- Request our assignment data
 	if( cmd == "REQUEST" and PaladinBuffer:HasPermission(sender) ) then
-		PaladinBuffer:SendPersonalAssignment()
+		-- We already got a request from this person, and it's still throttled
+		if( requestThrottle[sender] and requestThrottle[sender] <= GetTime() ) then
+			return
+		end
+		
+		requestThrottle[sender] = GetTime() + THROTTLE_TIME
+		
+		-- This lets us know that the person has Pally Power support on, so any of there comms using Pally Power data
+		-- should be ignored, as they will be sending data in our real format as well
+		supportsPP[sender] = arg == "true"
+		
+		self:SendPersonalAssignment()
 	
-	-- Assignment for people
-	elseif( cmd == "ASSIGN" and arg --[[and playerName ~= sender]] and PaladinBuffer:HasPermission(sender) ) then
-		self:ParseAssignments(sender, string.split(":", arg))
+	-- Reset + Assign, this implies that any data not present is there because they aren't assigned it
+	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+		self:ParsePlayerAssignments(true, string.split(";", arg))
+		
+	-- Assign, this implies that the data is partially sent, meaning it might be multiple ASSIGNs to get all of them done
+	-- I'm using RASSIGN for this, ASSIGN is "just in case"
+	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+		self:ParsePlayerAssignments(false, string.split(";", arg))
 		
 	-- We got this persons assignments
-	elseif( cmd == "MYASSIGN" and arg --[[and playerName ~= sender]] ) then
+	elseif( cmd == "MYDATA" and arg and playerName ~= sender ) then
 		local talents, assignments = string.split(";", arg)
 		if( talents and assignments ) then
+			-- It's implied that if the information wasn't sent in this that they aren't assigned to it
+			-- we basically trade a trivial amount of CPU (resetting two tables) for less comm data sent through the addon channels
+			PaladinBuffer:ResetBlessingData(sender)
+			PaladinBuffer:ClearAssignments(sender)
+			
 			self:ParseTalents(sender, string.split(":", talents))
-			self:ParseAssignments(sender, string.format(":", assignments))
+			self:ParseAssignments(sender, string.split(":", assignments))
 		end
 		
 	-- Requesting symbol totals
@@ -115,16 +199,17 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	
 	-- Clear assignments from people
 	elseif( cmd == "CLEAR" and PaladinBuffer:HasPermission(sender) ) then
-		PaladinBuffer:ClearAssignments()
+		PaladinBuffer:ClearAllAssignments()
 		
 	-- Symbol total received
 	--elseif( cmd == "SYMBOLS" ) then
 	end
 end
 
-function Sync:SendMessage(msg)
-	self:SendCommMessage(msg, "RAID")
+function Sync:SendMessage(msg, prefix)
+	self:SendCommMessage(prefix or "PALB", msg, "RAID")
 end
+ 
 
 --[[
 Pally Power sync format
@@ -135,7 +220,7 @@ REQ
 ASSIGN <name> <class #> <skill #>
  Assign a specific person to a class as well as the spell they are assigned
 
-NASSIGN <target> <class> <casterName> <skill ID>
+NASSIGN <casterName> <class> <target> <skill ID>
  Assign a specific person to a player for casting a single buff
 
 MASSIGN <name> <skill #>
@@ -159,89 +244,164 @@ Order of the spell data is Wisdom, Might,  Kings, Sanc
 ]]
 
 -- Pally Power -> Paladin Buffer conversions
-local singleConversions = {[1] = "wisdom", [2] = "might", [3] = "kings", [4] = "sanct", ["wisdom"] = 1, ["might"] = 2, ["kings"] = 3, ["sanct"] = 4}
-local greaterConversions = {[1] = "gwisdom", [2] = "gmight", [3] = "gkings", [4] = "gsanct", ["gwisdom"] = 1, ["gmight"] = 2, ["gkings"] = 3, ["gsanct"] = 4}
-local classConversions = {[1] = "WARRIOR", [2] = "ROGUE", [3] = "PRIEST", [4] = "DRUID", [5] = "PALADIN", [6] = "HUNTER", [7] = "MAGE", [8] = "WARLOCK", [9] = "SHAMAN", [10] = "DEATHKNIGHT", [11] = "PET", ["WARRIOR"] = 1, ["ROGUE"] = 2, ["PRIEST"] = 3, ["DRUID"] = 4, ["PALADIN"] = 5, ["HUNTER"] = 6, ["MAGE"] = 7, ["WARLOCK"] = 8, ["SHAMAN"] = 9, ["DEATHKNIGHT"] = 10, ["PET"] = 11}
+local singleConversions = {[1] = "wisdom", [2] = "might", [3] = "kings", [4] = "sanct", ["wisdom"] = 1, ["might"] = 2, ["kings"] = 3, ["sanct"] = 4, ["none"] = "n", ["n"] = "none"}
+local greaterConversions = {[1] = "gwisdom", [2] = "gmight", [3] = "gkings", [4] = "gsanct", ["gwisdom"] = 1, ["gmight"] = 2, ["gkings"] = 3, ["gsanct"] = 4, [0] = "none", ["none"] = "n", ["n"] = "none"}
+local classConversions = {[1] = "WARRIOR", [2] = "ROGUE", [3] = "PRIEST", [4] = "DRUID", [5] = "PALADIN", [6] = "HUNTER", [7] = "MAGE", [8] = "WARLOCK", [9] = "SHAMAN", [10] = "DEATHKNIGHT", ["WARRIOR"] = 1, ["ROGUE"] = 2, ["PRIEST"] = 3, ["DRUID"] = 4, ["PALADIN"] = 5, ["HUNTER"] = 6, ["MAGE"] = 7, ["WARLOCK"] = 8, ["SHAMAN"] = 9, ["DEATHKNIGHT"] = 10}
 local singleMaxRanks = {["might"] = 10, ["wisdom"] = 9, ["kings"] = 1, ["sanct"] = 1}
+local TOTAL_CLASSES = 11
 
-function Sync:SendTerribleFormat()
-	-- Compile the list of what we have trained/talented
-	local spellList = ""
-	for id, spellToken in pairs(spellIDToToken) do
-		if( PaladinBuffer.db.profile.blessings[playerName] ) then
-			local rank, points = string.split(".", PaladinBuffer.db.profile.blessings[playerName])
-			points = points or "n"
-			
-			spellList = string.format("%s%s%s", rank, points == "" and "n" or points)
+-- Send the assignments out
+-- Timer to make  sure we know the data was cleared first
+local function sendPP()
+	for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
+		local spellAssigned
+		for target, spellToken in pairs(assignments) do
+			-- Check if we can send this as a mass assignment to save bandwidth
+			if( not spellAssigned and classList[target] ) then
+				spellAssigned = spellToken
+			-- This is a class assignment, but it's using a different token so we have to do single greater assignments
+			elseif( classList[target] and spellToken ~= spellAssigned ) then
+				spellAssigned = nil
+			-- This is a single assignment, so send it regardless
+			elseif( not classList[target] and UnitExists(target) ) then
+				self:SendMessage(string.format("NASSIGN %s %d %s %d", name, classConversions[select(2, UnitClass(target))], target, singleConversions[spellToken]), "PLPRW")
+			end
+		end
+		
+		-- They are assigned to it, so we can do a mass to save bandwidth
+		if( spellAssigned ) then
+			Sync:SendMessage(string.format("MASSIGN %d", greaterConversions[spellAssigned]), "PLPRW")
+		-- Nope, :( send it as singles
 		else
-			spellList = string.format("%snn", spellList)
+			for target, spellToken in pairs(assignments) do
+				if( classList[target] ) then
+					Sync:SendMessage(string.format("ASSIGN %d d", classConversions[target], greaterConversions[spellToken]), "PLPRW")
+				end
+			end
 		end
 	end
+end
+
+local timeElapsed = 0
+local frame = CreateFrame("Frame")
+frame:Hide()
+frame:SetScript("OnUpdate", function(self, elapsed)
+	timeElapsed = timeElapsed - elapsed
+	
+	if( timeElapsed <= 0 ) then
+		sendPP()
+		self:Hide()
+	end
+end)
+
+function Sync:SendPPAssignments()
+	-- Clear everything
+	Sync:SendMessage("CLEAR", "PLPRW")
+	
+	-- Wait half a second so we can be more sure that it was actually all cleared before ours is sent out
+	timeElapsed = 0.50
+	frame:Show()
+end
+
+local function constructRankString(spellText, spellToken)
+	if( type(PaladinBuffer.db.profile.blessings[playerName][spellToken]) == "number" ) then
+		local rank, points = string.split(".", PaladinBuffer.db.profile.blessings[playerName][spellToken])
+		spellText = string.format("%s%s%s", spellText, rank, tonumber(points) or 0)
+	else
+		spellText = string.format("%snn", spellText)
+	end
+	
+	return spellText
+end
+
+function Sync:SendPPData()
+	-- Compile the list of what we have trained/talented
+	local spellText = ""
+	spellText = constructRankString(spellText, "gwisdom")
+	spellText = constructRankString(spellText, "gmight")
+	spellText = constructRankString(spellText, "gkings")
+	spellText = constructRankString(spellText, "gsanct")
 	
 	-- Compile a list of our assignments (If any)
-	local assignList = ""
-	for assignment, spellToken in pairs(PaladinBuffer.db.profile.assignments[playerName]) do
-		if( classConversions[assignment] ) then
-			assignList = string.format("%s%s%s", assignList, classConversions[assignment], greaterConversions[spellToken])
-		end
+	local assignText = ""
+	for i=1, TOTAL_CLASSES do
+		local classToken = classConversions[i]
+		local spellToken = PaladinBuffer.db.profile.assignments[playerName][classToken] or ""
+		assignText = string.format("%s%s", assignText, tonumber(greaterConversions[spellToken]) or "n")
 	end
 	
 	-- Send it off
-	SendAddonMessage("PLPWR", string.format("%s@%s", spellList, assignList), "RAID")
+	self:SendMessage(string.format("SELF %s@%s", spellText, assignText), "PLPRW")
+	-- No we don't want anyone to do our assignments
+	self:SendMessage("FREEASSIGN YES", "PLPRW")
 end
 
-function Sync:ParseBlessingData(singleType, greaterType, rank, improved)
+function Sync:ParsePPBlessingData(sender, singleType, greaterType, rank, improved)
+	-- They don't have this spell, so reset it
 	if( not rank ) then
+		PaladinBuffer:SetBlessingData(sender, singleType, nil)
+		PaladinBuffer:SetBlessingData(sender, greaterType, nil)
 		return
 	end
 	
-	improved = improved or 0
-	
 	-- We have to fake the rank for singles, as PP only passes the highest
-	local fraction = improved / 10
-	PaladinBuffer:SetBlessingData(sender, singleType, singleMaxRanks[singletype] + fraction)
+	local fraction = (improved or 0) / 10
+	PaladinBuffer:SetBlessingData(sender, singleType, singleMaxRanks[singleType] + fraction)
 	PaladinBuffer:SetBlessingData(sender, greaterType, rank + fraction)
 end
 
 function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
-	if( not PaladinBuffer.db.profile.ppSupport or prefix ~= "PLPWR" or type ~= "PARTY" or type ~= "RAID" ) then
+	-- Make sure we want this message
+	if( prefix ~= "PLPWR" or not PaladinBuffer.db.profile.ppSupport or supportsPP[sender] or ( type ~= "PARTY" and type ~= "RAID" ) ) then
 		return
 	end
 	
-	local cmd, arg = string.match(msg, "([a-zA-Z+]) (.+)")
+	local cmd, arg = string.match(msg, "([a-zA-Z]+) (.+)")
 	if( not cmd or not arg ) then
 		cmd = msg
 	elseif( arg ) then
 		arg = string.trim(arg)
 	end
-	
+
 	-- Request our data
-	if( cmd == "REQ" and arg and PaladinBuffer:HasPermission(sender) ) then
-		self:SendTerribleFormat()
+	if( cmd == "REQ" and PaladinBuffer:HasPermission(sender) ) then
+		-- We already got a request from this person, and it's still throttled
+		if( requestThrottle[sender] and requestThrottle[sender] <= GetTime() ) then
+			return
+		end
+		
+		requestThrottle[sender] = GetTime() + THROTTLE_TIME
+
+		self:SendPPData()
 		
 	-- Someone was assigned a specific spell to a specific class
-	elseif( cmd == "ASSIGN" and arg --[[and playerName ~= sender]] and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
 		local name, classID, spellID = string.split(" ", arg)
 		classID = tonumber(string.trim(classID))
-		spellID = tonumber(string.trim(spellID)) or ""
+		spellID = tonumber(string.trim(spellID)) or "n"
 		
-		if( name and classID and spellID ) then
+		if( name and classID and spellID  and classID <= 10 ) then
+			-- It's a pet, so prefix pet onto it that way we won't have any issues with identifying
+			if( classID == 11 ) then
+				name = string.format("PET.%s", name)
+			end
+			
 			PaladinBuffer:AssignBlessing(name, greaterConversions[spellID], classConversions[classID])	
 		end
 		
 	-- Someone was assigned to a single blessing
-	elseif( cmd == "NASSIGN" and arg --[[and playerName ~= sender]] and PaladinBuffer:HasPermission(sender) ) then
-		local target, _, casterName, spellID = string.split(" ", arg)
-		spellID = tonumber(string.trim(spellID)) or ""
+	elseif( cmd == "NASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+		local casterName, _, target, spellID = string.split(" ", arg)
+		spellID = tonumber(string.trim(spellID)) or "n"
 		
 		if( target and casterName and spellID ) then
 			PaladinBuffer:AssignBlessing(casterName, singleConversions[spellID], target)
 		end
 		
 	-- Someone was assigned to the same blessing on every class
-	elseif( cmd == "MASSIGN" and arg --[[and playerName ~= sender]] and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "MASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
 		local name, spellID = string.split(" ", arg)
-		spellID = tonumber(string.trim(spellID)) or ""
+		spellID = tonumber(string.trim(spellID)) or "n"
 		
 		if( name ) then
 			for classToken in pairs(classList) do
@@ -249,47 +409,44 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 			end
 		end
 	
-	-- We got data on someones assignments
-	elseif( cmd == "SELF" and arg and PaladinBuffer:HasPermission(sender) ) then
+	-- We got data on someones assignments, make sure they are a Paladin thought, why the fuck would I care about there own assignments
+	-- if they aren't a Paladin
+	elseif( cmd == "SELF" and arg and playerName ~= sender and UnitExists(sender) and select(2, UnitClass(sender)) == "PALADIN" ) then
 		local talents, assignments = string.split("@", arg)
 		if( talents and assignments ) then
 			-- Parse talents/etc, we don't do the below parsing type because it's an ordered list
 			talents = string.trim(talents)
-			
-			local wisdomRank, wisdomImproved, mightRank, mightImproved, kingsRank, kingsImproved, sanctRank, sanctImproved = string.match(talents, "([0-9])([0-9])([0-9])([0-9])([0-9])([0-9])([0-9])([0-9])")
-			self:ParseBlessingData("wisdom", "gwisdom", tonumber(wisdomRank), tonumber(wisdomImproved))
-			self:ParseBlessingData("might", "gmight", tonumber(mightRank), tonumber(mightImproved))
-			self:ParseBlessingData("kings", "gkings", tonumber(kingsRank), tonumber(kingsImproved))
-			self:ParseBlessingData("sanct", "gsanct", tonumber(sanctRank), tonumber(sanctImproved))
+						
+			local wisdomRank, wisdomImproved, mightRank, mightImproved, kingsRank, kingsImproved, sanctRank, sanctImproved = string.match(talents, "([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])")
+			self:ParsePPBlessingData(sender, "wisdom", "gwisdom", tonumber(wisdomRank), tonumber(wisdomImproved))
+			self:ParsePPBlessingData(sender, "might", "gmight", tonumber(mightRank), tonumber(mightImproved))
+			self:ParsePPBlessingData(sender, "kings", "gkings", tonumber(kingsRank), tonumber(kingsImproved))
+			self:ParsePPBlessingData(sender, "sanct", "gsanct", tonumber(sanctRank), tonumber(sanctImproved))
 			
 			-- Parse assignments
 			assignments = string.trim(assignments)
 			
 			local offset = 0
 			local length = string.len(assignments)
+			local classID = 0
 			while( offset <= length ) do
-				local classID = string.sub(talents, offset, offset)
-				local spellID = string.sub(talents, offset + 1, offset + 1)
-				
-				if( classID and spellID ) then
-					classID = tonumber(classID)
-					spellID = tonumber(spellID) or ""
-					
-					if( classID and spellID ) then
-						PaladinBuffer:AssignBlessing(name, greaterConversions[spellId], classConversions[classID])
-					end
-				end
-				
-				offset = offset + 2
+				offset = offset + 1
+				classID = classID + 1
+
+				local spellID = string.sub(assignments, offset, offset)
+				if( spellID == "" or classID >= 11 ) then break end
+				spellID = tonumber(spellID) or "n"
+										
+				PaladinBuffer:AssignBlessing(sender, greaterConversions[spellID], classConversions[classID])
 			end
 			
 		end
 	
-	-- Should I support this, I guess so?
+	-- Should I support this?
 	elseif( cmd == "FREEASSIGN" ) then
 	
 	-- Clear requested data
 	elseif( cmd == "CLEAR" and PaladinBuffer:HasPermission(sender) ) then
-		PaladinBuffer:ClearAssignments()
+		PaladinBuffer:ClearAllAssignments()
 	end
 end
