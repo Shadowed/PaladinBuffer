@@ -6,13 +6,24 @@ local supportsPP, requestThrottle = {}, {}
 local playerName = UnitName("player")
 local THROTTLE_TIME = 5
 
-function Sync:OnInitialize()
-	if( PaladinBuffer.disabled ) then return end
-
+function Sync:Enable()
 	self:RegisterEvent("CHAT_MSG_ADDON")
 	self.RegisterComm(self, "PALB")
 
 	classList = PaladinBuffer.classList
+end
+
+function Sync:Disable()
+	self:UnregisterEvent("CHAT_MSG_ADDON")
+	self:UnregisterAllComm()
+end
+
+function Sync:SendAssignmentReset()
+	self:SendMessage("CLEAR")
+	
+	if( PaladinBuffer.db.profile.ppSupport ) then
+		Sync:SendMessage("CLEAR", "PLPWR")
+	end
 end
 
 function Sync:RequestData()
@@ -29,7 +40,7 @@ function Sync:RequestData()
 				timeElapsed = timeElapsed - elapsed
 				
 				if( timeElapsed <= 0 ) then
-					Sync:SendMessage("REQ", "PLPRW")
+					Sync:SendMessage("REQ", "PLPWR")
 					self:Hide()
 				end
 			end)
@@ -77,6 +88,10 @@ function Sync:SendAssignments()
 end
 
 function Sync:SendPersonalAssignment()
+	if( PaladinBuffer.disabled ) then
+		return
+	end
+	
 	-- Compile the list of what we have trained/talented
 	local talentList
 	for spellToken, rank in pairs(PaladinBuffer.db.profile.blessings[playerName]) do
@@ -155,11 +170,11 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	elseif( arg ) then
 		arg = string.trim(arg)
 	end
-		
+	
 	-- Request our assignment data
 	if( cmd == "REQUEST" and PaladinBuffer:HasPermission(sender) ) then
 		-- We already got a request from this person, and it's still throttled
-		if( requestThrottle[sender] and requestThrottle[sender] <= GetTime() ) then
+		if( requestThrottle[sender] and requestThrottle[sender] >= GetTime() ) then
 			return
 		end
 		
@@ -261,21 +276,24 @@ local function sendPP()
 				spellAssigned = spellToken
 			-- This is a class assignment, but it's using a different token so we have to do single greater assignments
 			elseif( classList[target] and spellToken ~= spellAssigned ) then
-				spellAssigned = nil
+				spellAssigned = "spam"
 			-- This is a single assignment, so send it regardless
 			elseif( not classList[target] and UnitExists(target) ) then
-				self:SendMessage(string.format("NASSIGN %s %d %s %d", name, classConversions[select(2, UnitClass(target))], target, singleConversions[spellToken]), "PLPRW")
+				Sync:SendMessage(string.format("NASSIGN %s %d %s %d", name, classConversions[select(2, UnitClass(target))], target, tonumber(singleConversions[spellToken]) or 0), "PLPWR")
 			end
 		end
 		
 		-- They are assigned to it, so we can do a mass to save bandwidth
-		if( spellAssigned ) then
-			Sync:SendMessage(string.format("MASSIGN %d", greaterConversions[spellAssigned]), "PLPRW")
+		if( spellAssigned and spellAssigned ~= "none" and spellAssigned ~= "spam" ) then
+			Sync:SendMessage(string.format("MASSIGN %s %s", name, greaterConversions[spellAssigned]), "PLPWR")
 		-- Nope, :( send it as singles
 		else
+			-- Send that we don't have pets assigned
+			Sync:SendMessage(string.format("ASSIGN %s 11 0", name), "PLPWR")
+			
 			for target, spellToken in pairs(assignments) do
 				if( classList[target] ) then
-					Sync:SendMessage(string.format("ASSIGN %d d", classConversions[target], greaterConversions[spellToken]), "PLPRW")
+					Sync:SendMessage(string.format("ASSIGN %s %d %s", name, classConversions[target], tonumber(greaterConversions[spellToken]) or 0), "PLPWR")
 				end
 			end
 		end
@@ -296,7 +314,7 @@ end)
 
 function Sync:SendPPAssignments()
 	-- Clear everything
-	Sync:SendMessage("CLEAR", "PLPRW")
+	Sync:SendMessage("CLEAR", "PLPWR")
 	
 	-- Wait half a second so we can be more sure that it was actually all cleared before ours is sent out
 	timeElapsed = 0.50
@@ -331,9 +349,9 @@ function Sync:SendPPData()
 	end
 	
 	-- Send it off
-	self:SendMessage(string.format("SELF %s@%s", spellText, assignText), "PLPRW")
+	self:SendMessage(string.format("SELF %s@%s", spellText, assignText), "PLPWR")
 	-- No we don't want anyone to do our assignments
-	self:SendMessage("FREEASSIGN YES", "PLPRW")
+	self:SendMessage("FREEASSIGN YES", "PLPWR")
 end
 
 function Sync:ParsePPBlessingData(sender, singleType, greaterType, rank, improved)
@@ -351,6 +369,14 @@ function Sync:ParsePPBlessingData(sender, singleType, greaterType, rank, improve
 end
 
 function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
+	--[[
+	if( sender == playerName ) then
+		print(" <-- ", prefix, sender, msg)
+	else
+		print(" --> ", prefix, sender, msg)
+	end
+	]]
+	
 	-- Make sure we want this message
 	if( prefix ~= "PLPWR" or not PaladinBuffer.db.profile.ppSupport or supportsPP[sender] or ( type ~= "PARTY" and type ~= "RAID" ) ) then
 		return
@@ -366,7 +392,7 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 	-- Request our data
 	if( cmd == "REQ" and PaladinBuffer:HasPermission(sender) ) then
 		-- We already got a request from this person, and it's still throttled
-		if( requestThrottle[sender] and requestThrottle[sender] <= GetTime() ) then
+		if( requestThrottle[sender] and requestThrottle[sender] >= GetTime() ) then
 			return
 		end
 		
@@ -381,11 +407,6 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 		spellID = tonumber(string.trim(spellID)) or "n"
 		
 		if( name and classID and spellID  and classID <= 10 ) then
-			-- It's a pet, so prefix pet onto it that way we won't have any issues with identifying
-			if( classID == 11 ) then
-				name = string.format("PET.%s", name)
-			end
-			
 			PaladinBuffer:AssignBlessing(name, greaterConversions[spellID], classConversions[classID])	
 		end
 		
@@ -446,7 +467,7 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 	elseif( cmd == "FREEASSIGN" ) then
 	
 	-- Clear requested data
-	elseif( cmd == "CLEAR" and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "CLEAR" and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
 		PaladinBuffer:ClearAllAssignments()
 	end
 end

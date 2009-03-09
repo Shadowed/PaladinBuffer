@@ -10,53 +10,98 @@ local raidUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData = 
 local improved = {[GetSpellInfo(20244)] = {"wisdom", "gwisdom"}, [GetSpellInfo(20042)] = {"might", "gmight"}}
 local blessingTypes = {["gmight"] = "greater", ["gwisdom"] = "greater", ["gkings"] = "greater", ["gsanct"] = "greater", ["might"] = "single", ["wisdom"] = "single", ["kings"] = "single", ["sanct"] = "single"}
 local blessings = {["might"] = GetSpellInfo(56520), ["gmight"] = GetSpellInfo(48934), ["wisdom"] = GetSpellInfo(56521), ["gwisdom"] = GetSpellInfo(48938), ["sanct"] = GetSpellInfo(20911), ["gsanct"] = GetSpellInfo(25899), ["kings"] = GetSpellInfo(20217), ["gkings"] = GetSpellInfo(25898)}
+local instanceType
 
 function PaladinBuffer:OnInitialize()
 	self.defaults = {
 		profile = {
 			ppSupport = true,
+			greaterbinding = "CTRL-1",
+			singleBinding = "CTRL-2",
 			scale = 1.0,
-			blessings = {[playerName] = {}},
-			assignments = {[playerName] = {}},
+			rangeThreshold = 1.0,
+			timeThreshold = 0.50,
+			blessings = {},
+			assignments = {},
+			inside = {["raid"] = true, ["party"] = true, ["none"] = true},
+			frame = {
+				enabled = true,
+				classes = true,
+				hideInCombat = true,
+				locked = false,
+				growUp = false,
+				scale = 1.0,
+				columns = 1,
+			},
 		},
 	}
 	
 	-- Initialize the DB
 	self.db = LibStub:GetLibrary("AceDB-3.0"):New("PaladinBufferDB", self.defaults)
-	--self.db.RegisterCallback(self, "OnProfileChanged", "Reload")
-	--self.db.RegisterCallback(self, "OnProfileCopied", "Reload")
-	--self.db.RegisterCallback(self, "OnProfileReset", "Reload")
+	self.db.RegisterCallback(self, "OnProfileChanged", "Reload")
+	self.db.RegisterCallback(self, "OnProfileCopied", "Reload")
+	self.db.RegisterCallback(self, "OnProfileReset", "Reload")
 
 	self.revision = tonumber(string.match("$Revision$", "(%d+)") or 1)
 
 	-- If they aren't a Paladin disable this mod
 	if( select(2, UnitClass("player")) ~= "PALADIN" ) then
 		PaladinBuffer.disabled = true
-		if( not PaladinBuffer.db.profile.warned ) then
-			PaladinBuffer.db.profile.warned = true
-			PaladinBuffer:Print(L["Warning! Paladin Buffer has been disabled for this character as you are not a Paladin."])
-		end
-		return
 	end
 	
-	self:RegisterEvent("RAID_ROSTER_UPDATE")
+	self:RegisterEvent("RAID_ROSTER_UPDATE", "ScanGroup")
+	self:RegisterEvent("PARTY_MEMBERS_CHANGED", "ScanGroup")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
 	self:RegisterEvent("LEARNED_SPELL_IN_TAB", "ScanSpells")
+	self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+		
+	-- Defaults
+	local setup
+	if( not self.disabled and not self.db.profile.assignments[playerName] ) then
+		self.db.profile.assignments[playerName] = {}
+		setup = true
+	end
 	
 	-- Load class list
 	for classToken in pairs(RAID_CLASS_COLORS) do
 		classList[classToken] = true
 
 		-- Player should ALWAYS have a default assignment set
-		self.defaults.profile.assignments[playerName][classToken] = "none"
+		if( setup ) then
+			self.db.profile.assignments[playerName][classToken] = "none"
+		end
 	end
 	
+	-- So modules can access this data
 	self.classList = classList
+	self.blessings = blessings
 	self.blessingTypes = blessingTypes
 	self.improved = improved
 	self.talentData = talentData
 	self.raidUnits = raidUnits
 	self.partyUnits = partyUnits
+	self.groupRoster = groupRoster
+	
+	-- Create buff binding
+	self.smartGreaterButton = CreateFrame("Button", "PBSmartGreaterButton", nil, "SecureActionButtonTemplate")
+	self.smartGreaterButton:SetScript("PreClick", function(self)
+		if( not InCombatLockdown() and PaladinBuffer.isEnabled ) then
+			local type, unit, spell = PaladinBuffer.modules.BuffGUI:AutoBuffLowestGreater(self, "ALL")
+			self:SetAttribute("type", type)
+			self:SetAttribute("unit", unit)
+			self:SetAttribute("spell", spell)
+		end
+	end)
+	
+	self.smartSingleButton = CreateFrame("Button", "PBSmartSingleButton", nil, "SecureActionButtonTemplate")
+	self.smartSingleButton:SetScript("PreClick", function(self)
+		if( not InCombatLockdown() and PaladinBuffer.isEnabled ) then
+			local type, unit, spell = PaladinBuffer.modules.BuffGUI:AutoBuffLowestSingle(self, "ALL")
+			self:SetAttribute("type", type)
+			self:SetAttribute("unit", unit)
+			self:SetAttribute("spell", spell)
+		end
+	end)
 	
 	-- Save a list of unitids
 	for i=1, MAX_RAID_MEMBERS do
@@ -95,18 +140,33 @@ function PaladinBuffer:ClearAssignments(caster)
 	end
 end
 
--- Assign a Paladin to a specific assignment
-function PaladinBuffer:AssignBlessing(caster, spellToken, assignment)
+-- Initialize the basic player data we need for them
+local function setupPlayerData(caster)
+	local self = PaladinBuffer
+	local fire
 	if( not self.db.profile.assignments[caster] ) then
 		self.db.profile.assignments[caster] = {}
 
 		for classToken in pairs(classList) do
 			self.db.profile.assignments[caster][classToken] = "none"
 		end
-		
-		self:SendMessage("PB_DISCOVERED_PLAYER", caster)
+
+		fire = true
 	end
 
+	if( not self.db.profile.blessings[caster] ) then
+		self.db.profile.blessings[caster] = {}
+		fire = true
+	end
+
+
+	self:SendMessage("PB_DISCOVERED_PLAYER", caster)
+end
+
+-- Assign a Paladin to a specific assignment
+function PaladinBuffer:AssignBlessing(caster, spellToken, assignment)
+	setupPlayerData(caster)
+	
 	-- Check if the blessing was already assigned, if so cancel it for the other person
 	if( spellToken ~= "none" ) then
 		for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
@@ -134,9 +194,7 @@ end
 
 -- Set someone as having an improved blessing
 function PaladinBuffer:SetBlessingData(caster, spellToken, rank)
-	if( not self.db.profile.blessings[caster] ) then
-		self.db.profile.blessings[caster] = {}
-	end
+	setupPlayerData(caster)
 	
 	self.db.profile.blessings[caster][spellToken] = rank
 	self:SendMessage("PB_SPELL_DATA", caster, spellToken, rank)
@@ -155,6 +213,13 @@ function PaladinBuffer:ClearAllAssignments()
 		
 		self:SendMessage("PB_CLEARED_ASSIGNMENTS")
 	end
+end
+
+-- Remove a single persons assignment
+function PaladinBuffer:RemovePlayerData(caster)
+	self.db.profile.assignments[caster] = nil
+	self.db.profile.blessings[caster] = nil
+	self:SendMessage("PB_RESET_ASSIGNMENTS", caster)
 end
 
 -- Remove the table completely, remove all assignments
@@ -179,6 +244,10 @@ end
 
 -- Scan what spells the player has
 function PaladinBuffer:ScanSpells()
+	if( PaladinBuffer.disabled ) then
+		return
+	end
+	
 	-- Reset what we have
 	for token in pairs(self.db.profile.blessings[playerName]) do
 		self.db.profile.blessings[playerName][token] = nil
@@ -191,7 +260,7 @@ function PaladinBuffer:ScanSpells()
 			rank = rank == "" and 1 or tonumber(string.match(rank, L["Rank ([0-9]+)"]))
 			self.db.profile.blessings[playerName][spellToken] = rank
 		else
-			self.db.profile.blessings[playerName][spellToken] = "none"
+			self.db.profile.blessings[playerName][spellToken] = nil
 		end
 	end
 	
@@ -218,11 +287,11 @@ function PaladinBuffer:ScanSpells()
 end
 
 -- Raid roster was updated, reload it
-function PaladinBuffer:RAID_ROSTER_UPDATE()
+function PaladinBuffer:ScanGroup()
 	for k in pairs(groupRoster) do groupRoster[k] = nil end
 	for k in pairs(hasGroupRank) do hasGroupRank[k] = nil end
 
-	if( GetNumRaidMembers() == 0 ) then
+	if( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) then
 		PaladinBuffer:ResetAllAssignments()
 		return
 	end
@@ -236,24 +305,88 @@ function PaladinBuffer:RAID_ROSTER_UPDATE()
 		groupRoster[name] = raidUnits[i]
 	end
 
-	for i=1, GetNumPartyMembers() do
-		local name = UnitName(partyUnits[i])
-		if( UnitIsPartyLeader(partyUnits[i]) ) then
-			hasGroupRank[name] = true
+	if( GetNumRaidMembers() == 0 ) then
+		groupRoster[playerName] = "player"
+		hasGroupRank[playerName] = UnitIsPartyLeader("player") and true or false
+		
+		for i=1, GetNumPartyMembers() do
+			local name = UnitName(partyUnits[i])
+			if( UnitIsPartyLeader(partyUnits[i]) ) then
+				hasGroupRank[name] = true
+			end
+
+			groupRoster[name] = partyUnits[i]
 		end
+	end
 	
-		groupRoster[name] = partyUnits[i]
+	-- Remove data if the person left the raid
+	for name in pairs(PaladinBuffer.db.profile.blessings) do
+		if( not groupRoster[name] ) then
+			
+		end
 	end
 end
 
 -- Entering the world for the first time, might need to do some setup
 function PaladinBuffer:PLAYER_ENTERING_WORLD()
-	if( GetNumRaidMembers() > 0 ) then
-		self:RAID_ROSTER_UPDATE()
+	self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+
+	if( GetNumRaidMembers() > 0 or GetNumPartyMembers() > 0 ) then
+		self:ScanGroup()
 	end
 	
 	self:ScanSpells()
-	self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+	self:ZONE_CHANGED_NEW_AREA()
+	self:UpdateKeyBindings()
+end
+
+function PaladinBuffer:ZONE_CHANGED_NEW_AREA()
+	local type = select(2, IsInInstance())
+	if( type ~= instanceType ) then
+		if( self.db.profile.inside[type] ) then
+			self.isEnabled = true
+			for _, module in pairs(self.modules) do
+				if( module.Enable ) then
+					module:Enable()
+				end
+			end
+		else
+			self.isEnabled = nil
+			for _, module in pairs(self.modules) do
+				if( module.Disable ) then
+					module:Disable()
+				end
+			end
+		end
+	end
+	
+	instanceType = type
+end
+
+-- We had a key binding update queued
+function PaladinBuffer:PLAYER_REGEN_ENABLED()
+	self:UpdateKeyBindings()
+	self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+end
+
+-- Update key bindings for the auto buffing
+function PaladinBuffer:UpdateKeyBindings()
+	if( InCombatLockdown() ) then
+		self:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
+	end
+	
+	if( self.db.profile.greaterBinding ~= "" ) then
+		SetOverrideBindingClick(self.smartGreaterButton, false, self.db.profile.greaterBinding, self.smartGreaterButton:GetName())	
+	else
+		ClearOverrideBindings(self.smartGreaterButton)
+	end
+
+	if( self.db.profile.singleBinding ~= "" ) then
+		SetOverrideBindingClick(self.smartSingleButton, false, self.db.profile.singleBinding, self.smartSingleButton:GetName())	
+	else
+		ClearOverrideBindings(self.smartSingleButton)
+	end
 end
 
 -- Random misc
@@ -261,5 +394,19 @@ function PaladinBuffer:Print(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Paladin Buffer|r: " .. msg)
 end
 
+function PaladinBuffer:Echo(msg)
+	DEFAULT_CHAT_FRAME:AddMessage(msg)
+end
+
 function PaladinBuffer:Reload()
+	instanceType = nil
+	self:ZONE_CHANGED_NEW_AREA()	
+	self:UpdateKeyBindings()
+		
+	-- Reload modules if needed
+	for _, module in pairs(self.modules) do
+		if( module.Reload ) then
+			module:Reload()
+		end
+	end
 end

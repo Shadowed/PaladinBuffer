@@ -19,4 +19,6 @@ localization.enUS.lua
 PaladinBuffer.lua
 assignments.lua
 assigngui.lua
+buffgui.lua
+config.lua
 sync.lua

@@ -7,23 +7,6 @@ local groupList, displayList, classTotals
 local MAX_GROUP_ROWS = 14
 local ROW_HEIGHT = 17
 
-
-function Assign:OnInitialize()
-	if( PaladinBuffer.disabled ) then return end
-	
-	SLASH_PALADINBUFFER1 = "/paladinbuffer"
-	SLASH_PALADINBUFFER2 = "/pb"
-	SlashCmdList["PALADINBUFFER"] = function(msg)
-		Assign:CreateFrame()
-		
-		if( Assign.frame:IsVisible() ) then
-			Assign.frame:Hide()	
-		else
-			Assign.frame:Show()
-		end
-	end
-end
-
 function Assign:CreateTables()
 	classes = {"WARRIOR","ROGUE","PRIEST","DRUID","PALADIN","HUNTER","MAGE","WARLOCK","SHAMAN", "DEATHKNIGHT"}
 	blacklisted = {["WARRIOR"] = "gwisdom", ["ROGUE"] = "gwisdom", ["PRIEST"] = "gmight", ["MAGE"] = "gmight", ["DEATHKNIGHT"] = "gwisdom"}
@@ -36,12 +19,6 @@ end
 
 -- Message fired so we should update the visible blessings
 function Assign:UpdateAssignments(event, caster, target)
-	-- Single blessing updated, so update that UI if it was created
-	if( Assign.singleFrame and Assign.singleFrame:IsVisible() and event == "PB_ASSIGNED_BLESSINGS" and not PaladinBuffer.classList[target] ) then
-		self:UpdateSingle()
-		return
-	end
-
 	for id, row in pairs(self.rows) do
 		if( row:IsVisible() and ( not caster or row.playerName == caster ) ) then
 			self:UpdateAssignmentButtons(id)
@@ -49,6 +26,11 @@ function Assign:UpdateAssignments(event, caster, target)
 	end
 	
 	self:UpdateClassAssignments()
+
+	-- Update single blessings frame if needed
+	if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
+		self:UpdateSingle()
+	end
 end
 
 -- Update the text below the class icon that shows what blessings are currently assigned to them
@@ -154,12 +136,14 @@ function Assign:UpdateAssignmentButtons(rowID)
 					icon:SetAlpha(assignData[icon.classToken] ~= icon.spellToken and 0.40 or 1.0)
 					icon.playerName = self.rows[rowID].playerName
 					icon.disabled = nil
+					icon:Show()
 				else
 					SetDesaturation(icon:GetNormalTexture(), true)
 
 					icon:EnableMouse(false)
 					icon:SetAlpha(0.10)
 					icon.disabled = true
+					icon:Show()
 				end
 			end
 
@@ -202,7 +186,6 @@ function Assign:UpdateBlessingInfo(rowID)
 			local button = row.blessings[bID]
 			if( not button ) then
 				button = CreateFrame("Button", nil, row)
-				button:SetNormalTexture(blessingIcons[spellToken])
 				button:SetHeight(16)
 				button:SetWidth(16)
 
@@ -220,6 +203,7 @@ function Assign:UpdateBlessingInfo(rowID)
 			end
 
 			button.spellToken = spellToken
+			button:SetNormalTexture(blessingIcons[spellToken])
 			button:ClearAllPoints()
 			button:Show()
 		end
@@ -231,18 +215,22 @@ function Assign:UpdateBlessingInfo(rowID)
 	-- Now position blessings
 	if( row.blessings[2] ) then
 		row.blessings[2]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 60, -6)
+		row.blessings[2]:Show()
 	end
 	
 	if( row.blessings[1] ) then
 		row.blessings[1]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -6)
+		row.blessings[1]:Show()
 	end
 
 	if( row.blessings[4] ) then
 		row.blessings[4]:SetPoint("TOPLEFT", row.blessings[2], "BOTTOMLEFT", 0, -2)
+		row.blessings[4]:Show()
 	end
 	
 	if( row.blessings[3] ) then
 		row.blessings[3]:SetPoint("TOPLEFT", row.blessings[1], "BOTTOMLEFT", 0, -2)
+		row.blessings[3]:Show()
 	end
 end
 
@@ -280,7 +268,7 @@ function Assign:UpdatePlayerRows()
 			
 			self:CreateAssignmentButtons(rowID)
 		end
-		
+				
 		row.playerName = name
 		row.text:SetText(name)
 		row:Show()
@@ -302,7 +290,7 @@ function Assign:UpdatePlayerRows()
 				row.grid:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -60)
 				row:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 4, -63)
 			end
-
+			
 			self:UpdateBlessingInfo(id)
 			self:UpdateAssignmentButtons(id)
 		else
@@ -392,7 +380,7 @@ local function sortGroup(a, b)
 end
 
 function Assign:UpdateGroupList()
-	for _, row in pairs(groupList) do row.enabled = nil row.class = nil row.text = nil end
+	for _, row in pairs(groupList) do row.enabled = nil row.class = nil row.text = "" end
 	for i=#(displayList), 1, -1 do table.remove(displayList, i) end
 	for k in pairs(classTotals) do classTotals[k] = nil end
 	
@@ -581,16 +569,27 @@ end
 
 -- Frame shown, so we want to be updating the UI
 local function OnShow(self)
-	Assign:UpdateAssignments()
 	Assign:UpdatePlayerRows()
+	Assign:UpdateAssignments()
 	
 	-- New player found, will need to update rows
-	Assign:RegisterMessage("PB_DISCOVERED_PLAYER", "UpdatePlayerRows")
-	
+	Assign:RegisterMessage("PB_DISCOVERED_PLAYER", function(event, caster)
+		Assign:UpdatePlayerRows()
+		Assign:UpdateAssignments(nil, caster)
+
+		if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
+			Assign:UpdateSingle()
+		end
+	end)
+
 	-- All assignments reset, so we can hide most of the UI
-	Assign:RegisterMessage("PB_RESET_ASSIGNMENTS", function()
+	Assign:RegisterMessage("PB_RESET_ASSIGNMENTS", function(event, caster)
 		Assign:UpdatePlayerRows()
 		Assign:UpdateAssignments()
+		
+		if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
+			Assign:UpdateSingle()
+		end
 	end)
 
 	-- What blessings they were assigned changed
@@ -625,15 +624,30 @@ end
 local function quickAssignBlessings()
 	PaladinBuffer.modules.Assign:SetHighestBlessers()
 	PaladinBuffer.modules.Assign:CalculateBlessings()
+	PaladinBuffer.modules.Sync:SendAssignments()
 end
 
 -- Reset everything
 local function clearAllBlessings()
 	PaladinBuffer:ClearAllAssignments()
+	PaladinBuffer.modules.Sync:SendAssignmentReset()
 end
 
 -- Refresh blessing data
-local function refreshBlessingData()
+local timeElapsed = 0
+local function throttleUpdate(self, elapsed)
+	timeElapsed = timeElapsed - elapsed
+	if( timeElapsed <= 0 ) then
+		self:Enable()
+		self:SetScript("OnUpdate", nil)
+	end
+end
+
+local function refreshBlessingData(self)
+	timeElapsed = 5
+	self:Disable()
+	self:SetScript("OnUpdate", throttleUpdate)
+	
 	PaladinBuffer.modules.Sync:RequestData()
 end
 
@@ -770,6 +784,7 @@ function Assign:CreateFrame()
 	local refresh = CreateFrame("Button", nil, self.frame, "UIPanelButtonGrayTemplate")
 	refresh:SetNormalFontObject(GameFontHighlightSmall)
 	refresh:SetHighlightFontObject(GameFontHighlightSmall)
+	refresh:SetDisabledFontObject(GameFontDisableSmall)
 	refresh:SetHeight(18)
 	refresh:SetWidth(55)
 	refresh:SetText(L["Refresh"])
@@ -844,4 +859,10 @@ function Assign:CreateFrame()
 
 	self.assignColumns = {}
 	self.rows = {}
+end
+
+function Assign:Reload()
+	if( self.frame ) then
+		self.frame:SetScale(PaladinBuffer.db.profile.scale)
+	end
 end
