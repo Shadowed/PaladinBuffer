@@ -313,7 +313,7 @@ end
 
 -- Load various info into the table
 function Assign:LoadUnit(unit)
-	if( not UnitExists(unit) ) then
+	if( not UnitExists(unit) or ( unit ~= "player" and UnitIsUnit(unit, "player") ) ) then
 		return
 	end
 	
@@ -384,6 +384,9 @@ function Assign:UpdateGroupList()
 	for i=#(displayList), 1, -1 do table.remove(displayList, i) end
 	for k in pairs(classTotals) do classTotals[k] = nil end
 	
+	-- Load player
+	self:LoadUnit("player")
+	
 	-- Load raid
 	for i=1, GetNumRaidMembers() do
 		self:LoadUnit(PaladinBuffer.raidUnits[i])
@@ -441,7 +444,7 @@ function Assign:UpdateSingle()
 			
 			if( groupData.class ~= "HEADER" ) then
 				for _, blessing in pairs(row.blessings) do
-					if( singleBlacklist[groupData.class] ~= blessing.spellToken and PaladinBuffer.modules.Assign:IsBlessingAvailable(groupData.id, blessing.spellToken) ) then
+					if( singleBlacklist[groupData.class] ~= blessing.spellToken and not PaladinBuffer.modules.Assign:IsGreaterAssigned(groupData.class, blessing.spellToken) and PaladinBuffer.modules.Assign:IsBlessingAvailable(groupData.id, blessing.spellToken) ) then
 						SetDesaturation(blessing:GetNormalTexture(), nil)
 						
 						blessing:EnableMouse(true)
@@ -515,12 +518,12 @@ function Assign:CeateSingleFrame()
 	self.singleFrame:SetBackdropBorderColor(0.90, 0.90, 0.90, 0.95)
 	self.singleFrame:SetPoint("TOPLEFT", self.frame.push, "TOPRIGHT", 3, 10)
 	self.singleFrame:SetScript("OnShow", function()
-		Assign:RegisterEvent("RAID_ROSTER_UPDATE", "UpdateGroupList")
+		Assign:RegisterMessage("PB_ROSTER_UPDATED", "UpdateGroupList")
 		Assign:UpdateGroupList()
 		Assign:UpdateSingle()
 	end)
 	self.singleFrame:SetScript("OnHide", function()
-		Assign:UnregisterEvent("RAID_ROSTER_UPDATE", "UpdateGroupList")
+		Assign:UnregisterMessage("PB_ROSTER_UPDATED", "UpdateGroupList")
 	end)
 	self.singleFrame:Hide()
 

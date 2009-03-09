@@ -2,6 +2,7 @@ if( not PaladinBuffer ) then return end
 
 local Assign = PaladinBuffer:NewModule("Assign", "AceEvent-3.0", "AceComm-3.0")
 local blessings, priorities, currentSort, assignments, blacklist
+local singleToGreater = {["might"] = "gmight", ["kings"] = "gkings", ["wisdom"] = "gwisdom", ["sanct"] = "gsanct"}
 
 -- Create our tables for doing smart assignments
 function Assign:CreateTables()
@@ -129,4 +130,16 @@ function Assign:IsBlessingAvailable(target, spellToken)
 			return true
 		end
 	end
+	
+	return false
+end
+
+function Assign:IsGreaterAssigned(class, spellToken)
+	for _, data in pairs(PaladinBuffer.db.profile.assignments) do
+		if( data[class] == singleToGreater[spellToken] ) then
+			return true
+		end
+	end
+	
+	return false
 end

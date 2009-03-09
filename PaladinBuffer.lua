@@ -82,26 +82,6 @@ function PaladinBuffer:OnInitialize()
 	self.partyUnits = partyUnits
 	self.groupRoster = groupRoster
 	
-	-- Create buff binding
-	self.smartGreaterButton = CreateFrame("Button", "PBSmartGreaterButton", nil, "SecureActionButtonTemplate")
-	self.smartGreaterButton:SetScript("PreClick", function(self)
-		if( not InCombatLockdown() and PaladinBuffer.isEnabled ) then
-			local type, unit, spell = PaladinBuffer.modules.BuffGUI:AutoBuffLowestGreater(self, "ALL")
-			self:SetAttribute("type", type)
-			self:SetAttribute("unit", unit)
-			self:SetAttribute("spell", spell)
-		end
-	end)
-	
-	self.smartSingleButton = CreateFrame("Button", "PBSmartSingleButton", nil, "SecureActionButtonTemplate")
-	self.smartSingleButton:SetScript("PreClick", function(self)
-		if( not InCombatLockdown() and PaladinBuffer.isEnabled ) then
-			local type, unit, spell = PaladinBuffer.modules.BuffGUI:AutoBuffLowestSingle(self, "ALL")
-			self:SetAttribute("type", type)
-			self:SetAttribute("unit", unit)
-			self:SetAttribute("spell", spell)
-		end
-	end)
 	
 	-- Save a list of unitids
 	for i=1, MAX_RAID_MEMBERS do
@@ -230,7 +210,7 @@ function PaladinBuffer:ResetAllAssignments()
 			self.db.profile.blessings[name] = nil
 		else
 			for target in pairs(assignments) do
-				if( classList[data] ) then
+				if( classList[target] ) then
 					assignments[target] = "none"
 				else
 					assignments[target] = nil
@@ -291,8 +271,10 @@ function PaladinBuffer:ScanGroup()
 	for k in pairs(groupRoster) do groupRoster[k] = nil end
 	for k in pairs(hasGroupRank) do hasGroupRank[k] = nil end
 
+	-- Left raid :(
 	if( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) then
-		PaladinBuffer:ResetAllAssignments()
+		self:ResetAllAssignments()
+		self:SendMessage("PB_ROSTER_UPDATED")
 		return
 	end
 	
@@ -321,10 +303,16 @@ function PaladinBuffer:ScanGroup()
 	
 	-- Remove data if the person left the raid
 	for name in pairs(PaladinBuffer.db.profile.blessings) do
-		if( not groupRoster[name] ) then
-			
+		if( not groupRoster[name] and name ~= playerName ) then
+			PaladinBuffer.db.profile.blessings[name] = nil
+			PaladinBuffer.db.profile.assignments[name] = nil
+
+			self:SendMessage("PB_RESET_ASSIGNMENTS", name)
 		end
 	end
+	
+	-- Trigger that the roster list was updated
+	self:SendMessage("PB_ROSTER_UPDATED")
 end
 
 -- Entering the world for the first time, might need to do some setup
@@ -376,13 +364,39 @@ function PaladinBuffer:UpdateKeyBindings()
 		return
 	end
 	
-	if( self.db.profile.greaterBinding ~= "" ) then
+	-- Greater smart buffing
+	if( not self.smartGreaterButton ) then
+		self.smartGreaterButton = CreateFrame("Button", "PBSmartGreaterButton", nil, "SecureActionButtonTemplate")
+		self.smartGreaterButton:SetScript("PreClick", function(self)
+			if( not InCombatLockdown() and PaladinBuffer.isEnabled ) then
+				local type, unit, spell = PaladinBuffer.modules.BuffGUI:AutoBuffLowestGreater(self, "ALL")
+				self:SetAttribute("type", type)
+				self:SetAttribute("unit", unit)
+				self:SetAttribute("spell", spell)
+			end
+		end)
+	end
+	
+	if( self.db.profile.greaterBinding and self.db.profile.greaterBinding ~= "" ) then
 		SetOverrideBindingClick(self.smartGreaterButton, false, self.db.profile.greaterBinding, self.smartGreaterButton:GetName())	
 	else
 		ClearOverrideBindings(self.smartGreaterButton)
 	end
-
-	if( self.db.profile.singleBinding ~= "" ) then
+	
+	-- Single smart buffing
+	if( not self.smartSingleButton ) then
+		self.smartSingleButton = CreateFrame("Button", "PBSmartSingleButton", nil, "SecureActionButtonTemplate")
+		self.smartSingleButton:SetScript("PreClick", function(self)
+			if( not InCombatLockdown() and PaladinBuffer.isEnabled ) then
+				local type, unit, spell = PaladinBuffer.modules.BuffGUI:AutoBuffLowestSingle(self, "ALL")
+				self:SetAttribute("type", type)
+				self:SetAttribute("unit", unit)
+				self:SetAttribute("spell", spell)
+			end
+		end)
+	end
+	
+	if( self.db.profile.singleBinding and self.db.profile.singleBinding ~= "" ) then
 		SetOverrideBindingClick(self.smartSingleButton, false, self.db.profile.singleBinding, self.smartSingleButton:GetName())	
 	else
 		ClearOverrideBindings(self.smartSingleButton)

@@ -17,13 +17,13 @@ function Buff:Enable()
 	inCombat = InCombatLockdown()
 
 	self:RegisterEvent("UNIT_AURA")
-	self:RegisterEvent("RAID_ROSTER_UPDATE", "UpdateClassFrames")
 	self:RegisterEvent("PLAYER_REGEN_DISABLED")
 	self:RegisterEvent("PLAYER_REGEN_ENABLED")
 	
-	self:RegisterMessage("PB_ASSIGNED_BLESSINGS", "UpdateAssignmentIcons")
-	self:RegisterMessage("PB_RESET_ASSIGNMENTS", "UpdateAssignmentIcons")
-	self:RegisterMessage("PB_CLEARED_ASSIGNMENTS", "UpdateAssignmentIcons")
+	self:RegisterMessage("PB_ROSTER_UPDATED", "UpdateClassFrames")
+	self:RegisterMessage("PB_ASSIGNED_BLESSINGS", "UpdateFrame")
+	self:RegisterMessage("PB_RESET_ASSIGNMENTS", "UpdateFrame")
+	self:RegisterMessage("PB_CLEARED_ASSIGNMENTS", "UpdateFrame")
 	
 	self:ScanGroup()
 	self:UpdateClassFrames()
@@ -41,6 +41,18 @@ function Buff:Disable()
 	
 	if( self.frame ) then
 		self.frame:Hide()
+	end
+end
+
+function Buff:UpdateFrame()
+	if( self.frame and self.frame:IsVisible() ) then
+		self:UpdateAssignmentIcons()
+		self:UpdateAuraTimes()
+		
+		self:UpdateColorStatus(self.frame, self.frame.filter)
+		for _, frame in pairs(self.frame.classes) do
+			self:UpdateColorStatus(frame, frame.filter)
+		end
 	end
 end
 
@@ -76,7 +88,6 @@ function Buff:PLAYER_REGEN_ENABLED()
 end
 
 -- Update if we have people in or out of range
---/script PaladinBuffer.modules.BuffGUI:CreateFrame()
 function Buff:UpdateColorStatus(frame, filter)
 	local hasSingleOOR, lowestSingle, hasSingleMissing
 	local hasGreaterCast, hasGreaterOOR, lowestGreater, hasGreaterMissing	
@@ -134,7 +145,7 @@ function Buff:UpdateColorStatus(frame, filter)
 	elseif( lowestGreater and ((lowestGreater - time) / GREATER_DURATION) < PaladinBuffer.db.profile.timeThreshold ) then
 		needRecast = "greater"		
 	end
-	
+		
 	if( not needRecast ) then
 		frame:SetBackdropColor(0, 0, 0, 1.0)
 	elseif( needRecast == "greater" ) then
@@ -226,6 +237,7 @@ function Buff:FindLowestTime(classFilter, blessingName)
 	return "nil"
 end
 
+-- Return info for auto buffing on the lowest greater
 function Buff:AutoBuffLowestGreater(button, filter)
 	local castSpellOn, castSpell, lowestTime
 	for assignment, spellToken in pairs(assignments) do
@@ -248,6 +260,7 @@ function Buff:AutoBuffLowestGreater(button, filter)
 	return nil
 end
 
+-- Return info on auto buffing the lowest single
 function Buff:AutoBuffLowestSingle(button, filter)
 	local lowestTime, castSpell, castSpellOn
 	
@@ -542,6 +555,10 @@ function Buff:UpdateClassFrames()
 	if( not PaladinBuffer.db.profile.frame.enabled or ( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) ) then
 		if( self.frame ) then
 			self.frame:Hide()
+			
+			for _, frame in pairs(self.frame.classes) do
+				frame:Hide()
+			end
 		end
 		return
 	end
@@ -640,6 +657,12 @@ end
 
 -- Update the display icon for assignments
 function Buff:UpdateAssignmentIcons()
+	-- Reset the single blessing icon
+	for _, frame in pairs(self.frame.classes) do
+		frame.singleIcon = nil
+	end
+	
+	-- Now set the greater blessing icon + a single one if needed
 	for assignment, spellToken in pairs(assignments) do
 		if( PaladinBuffer.classList[assignment] ) then
 			local frame = self.frame.classes[assignment]
@@ -650,7 +673,7 @@ function Buff:UpdateAssignmentIcons()
 		elseif( UnitExists(assignment) ) then
 			local frame = self.frame.classes[select(2, UnitClass(assignment))]
 			if( frame ) then
-				frame.singleIcon = self.frame.singleIcon or nil
+				frame.singleIcon = self.frame.singleIcon
 			end
 		end
 	end
