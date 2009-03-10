@@ -40,6 +40,10 @@ function Buff:Disable()
 	end
 	
 	if( self.frame ) then
+		for _, frame in pairs(self.frame.classes) do
+			frame:Hide()
+		end
+		
 		self.frame:Hide()
 	end
 end
@@ -554,11 +558,11 @@ function Buff:UpdateClassFrames()
 	-- All frame things are disabled
 	if( not PaladinBuffer.db.profile.frame.enabled or ( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) ) then
 		if( self.frame ) then
-			self.frame:Hide()
-			
 			for _, frame in pairs(self.frame.classes) do
 				frame:Hide()
 			end
+
+			self.frame:Hide()
 		end
 		return
 	end
