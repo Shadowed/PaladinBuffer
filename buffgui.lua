@@ -44,10 +44,6 @@ function Buff:Disable()
 	end
 	
 	if( self.frame ) then
-		for _, frame in pairs(self.frame.classes) do
-			frame:Hide()
-		end
-		
 		self.frame:Hide()
 	end
 end
@@ -57,8 +53,8 @@ function Buff:UpdateFrame()
 		self:ScanGroup()
 		self:UpdateAssignmentIcons()
 		self:UpdateAuraTimes()
-		
 		self:UpdateColorStatus(self.frame, self.frame.filter)
+		
 		for _, frame in pairs(self.frame.classes) do
 			self:UpdateColorStatus(frame, frame.filter)
 		end
@@ -69,13 +65,9 @@ function Buff:PLAYER_REGEN_DISABLED()
 	inCombat = true
 		
 	if( self.frame ) then
-		self.frame.title:SetText(L["[C] Smart buff"])
+		self.frame.icon:SetAlpha(0.50)
 		
 		if( PaladinBuffer.db.profile.frame.hideInCombat ) then
-			for _, frame in pairs(self.frame.classes) do
-				frame:Hide()
-			end
-
 			self.frame:Hide()
 		end
 	end
@@ -92,7 +84,8 @@ function Buff:PLAYER_REGEN_ENABLED()
 	end
 
 	if( self.frame ) then
-		self.frame.title:SetText(L["Smart buff"])
+		self.frame.icon:SetAlpha(0.50)
+		self.frame:Show()
 	end
 end
 
@@ -240,10 +233,10 @@ function Buff:FindLowestTime(classFilter, blessingName)
 
 	-- Either we don't have this buff on the class yet, or we do but the time is below the threshold percent
 	local timeType = "singleThreshold"
-	if( PaladinBuffer.blessingTypes[blessingName] == "greater" ) then
+	if( PaladinBuffer.blessingTypes[blessings[blessingName]] == "greater" ) then
 		timeType = "greaterThreshold"
 	end
-	
+
 	if( hasBuff < visibleRange or not lowestTime or (lowestTime / 60) < PaladinBuffer.db.profile[timeType] ) then
 		return "cast", inSpellRange, (lowestTime or 0)
 	end
@@ -252,7 +245,7 @@ function Buff:FindLowestTime(classFilter, blessingName)
 end
 
 -- Return info for auto buffing on the lowest greater
-function Buff:AutoBuffLowestGreater(button, filter)
+function Buff:AutoBuffLowestGreater(filter)
 	local castSpellOn, castSpell, lowestTime
 	for assignment, spellToken in pairs(assignments) do
 		if( spellToken ~= "none" and PaladinBuffer.classList[assignment] and ( filter == "ALL" or filter == assignment ) ) then
@@ -275,7 +268,7 @@ function Buff:AutoBuffLowestGreater(button, filter)
 end
 
 -- Return info on auto buffing the lowest single
-function Buff:AutoBuffLowestSingle(button, filter)
+function Buff:AutoBuffLowestSingle(filter)
 	local lowestTime, castSpell, castSpellOn
 	
 	-- Find the lowest single blessing we cast, or the first missing one
@@ -422,7 +415,7 @@ local function updateTimer(self)
 	if( lowestTime and lowestTime >= time ) then
 		Buff:FormatTime(self.greaterText, self.greaterIcon, lowestTime - time)
 	elseif( self.filter ~= "ALL" and assignments[self.filter] == "none" ) then
-		self.greaterText:SetFormattedText("|T%s:19:19:0:0|t %s", self.greaterIcon, L["Not set"])
+		self.greaterText:SetFormattedText("|T%s:19:19:0:0|t %s", self.greaterIcon, L["None"])
 	else
 		self.greaterText:SetFormattedText("|T%s:19:19:0:0|t %s", self.greaterIcon, "---")
 	end
@@ -457,8 +450,8 @@ end
 function Buff:CreateSingleFrame(parent)
 	local frame = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate")
 	frame:SetFrameStrata("MEDIUM")
-	frame:SetHeight(30)
-	frame:SetWidth(95)
+	frame:SetHeight(32)
+	frame:SetWidth(85)
 	frame:SetBackdrop(self.backdrop)
 	frame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
 	frame:SetBackdropBorderColor(0.75, 0.75, 0.75, 0.90)
@@ -476,30 +469,37 @@ function Buff:CreateSingleFrame(parent)
 		end
 		
 		if( mouse == "LeftButton" ) then
-			local type, unit, spell = Buff:AutoBuffLowestGreater(self, self.filter)
+			local type, unit, spell = Buff:AutoBuffLowestGreater(self.filter)
 			self:SetAttribute("type1", type)
 			self:SetAttribute("unit1", unit)
 			self:SetAttribute("spell1", spell)
 		
-		elseif( mouse == "Rightself" ) then
-			local type, unit, spell = Buff:AutoBuffLowestSingle(self, self.filter)
+		elseif( mouse == "RightButton" ) then
+			local type, unit, spell = Buff:AutoBuffLowestSingle(self.filter)
 			self:SetAttribute("type2", type)
 			self:SetAttribute("unit2", unit)
 			self:SetAttribute("spell2", spell)
 		end
 	end)
 	
-	frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+	--frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	--frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+
+	frame.icon = frame:CreateTexture(nil, "ARTWORK")
+	frame.icon:SetHeight(24)
+	frame.icon:SetWidth(24)
+	frame.icon:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -4)
 
 	frame.greaterText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	frame.greaterText:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 1, 14)
+	frame.greaterText:SetFont((GameFontHighlightSmall:GetFont()), 11)
+	frame.greaterText:SetPoint("TOPLEFT", frame.icon, "TOPRIGHT", 2, 1)
 
 	frame.singleText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	frame.singleText:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", -2, 14)
+	frame.singleText:SetFont((GameFontHighlightSmall:GetFont()), 11)
+	frame.singleText:SetPoint("TOPLEFT", frame.greaterText, "BOTTOMLEFT", 0, -2)
 
 	frame.greaterIcon = ""
-	frame.singleIcon = nil
+	frame.singleIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion"
 	
 	auraUpdates[frame] = true
 	
@@ -554,7 +554,7 @@ function Buff:CreateFrame()
 	self.frame.singleIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion"
 	self.frame.greaterIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion_02"
 	self.frame.filter = "ALL"
-	self.frame.title:SetText(L["Smart buff"])
+	self.frame.icon:SetTexture("Interface\\Icons\\Spell_Holy_Aspiration")
 	self.frame:SetScale(PaladinBuffer.db.profile.frame.scale)
 	self.frame.classes = {}
 	self.frame:SetScript("OnShow", OnShow)
@@ -569,10 +569,6 @@ function Buff:UpdateClassFrames()
 	-- All frame things are disabled
 	if( not PaladinBuffer.db.profile.frame.enabled or ( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) ) then
 		if( self.frame ) then
-			for _, frame in pairs(self.frame.classes) do
-				frame:Hide()
-			end
-
 			self.frame:Hide()
 		end
 		return
@@ -599,13 +595,19 @@ function Buff:UpdateClassFrames()
 	for _, unit in pairs(groupRoster) do
 		local class, classToken = UnitClass(unit)
 		if( class and classToken ) then
-			if( not self.frame.classes[classToken] ) then
-				self.frame.classes[classToken] = self:CreateSingleFrame(self.frame)
-				self.frame.classes[classToken].filter = classToken
-				self.frame.classes[classToken].title:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[classToken].r, 255 * RAID_CLASS_COLORS[classToken].g, 255 * RAID_CLASS_COLORS[classToken].b, class)
+			local frame = self.frame.classes[classToken]
+			if( not frame ) then
+				frame = self:CreateSingleFrame(self.frame)
+				frame.filter = classToken
+				
+				local coords = CLASS_BUTTONS[classToken]
+				frame.icon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
+				frame.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+				
+				self.frame.classes[classToken] = frame
 			end
 
-			self.frame.classes[classToken].wasUpdated = true
+			frame.wasUpdated = true
 		end
 	end
 	
@@ -679,23 +681,12 @@ end
 
 -- Update the display icon for assignments
 function Buff:UpdateAssignmentIcons()
-	-- Reset the single blessing icon
-	for _, frame in pairs(self.frame.classes) do
-		frame.singleIcon = nil
-	end
-	
 	-- Now set the greater blessing icon + a single one if needed
 	for assignment, spellToken in pairs(assignments) do
 		if( PaladinBuffer.classList[assignment] ) then
 			local frame = self.frame.classes[assignment]
 			if( frame ) then
 				frame.greaterIcon = blessingIcons[spellToken] or self.frame.greaterIcon
-			end
-			
-		elseif( UnitExists(assignment) ) then
-			local frame = self.frame.classes[select(2, UnitClass(assignment))]
-			if( frame ) then
-				frame.singleIcon = self.frame.singleIcon
 			end
 		end
 	end
@@ -715,10 +706,10 @@ function Buff:FormatTime(text, icon, timeLeft)
 	end
 
 	if( hours > 0 ) then
-		text:SetFormattedText("|T%s:19:19:0:0|t %dh", icon, hours)
+		text:SetFormattedText("|T%s:20:20:0:0|t %dh", icon, hours)
 	elseif( minutes > 0 ) then
-		text:SetFormattedText("|T%s:19:19:0:0|t %dm", icon, minutes)
+		text:SetFormattedText("|T%s:20:20:0:0|t %dm", icon, minutes)
 	else
-		text:SetFormattedText("|T%s:19:19:0:0|t %02ds", icon, timeLeft > 0 and timeLeft or 0)
+		text:SetFormattedText("|T%s:20:20:0:0|t %02ds", icon, timeLeft > 0 and timeLeft or 0)
 	end
 end

@@ -61,12 +61,20 @@ end
 
 local function assignBlessing(self)
 	-- Check if we should toggle the assignment off
+	local spellToken = self.spellToken
 	if( PaladinBuffer.db.profile.assignments[self.playerName] and PaladinBuffer.db.profile.assignments[self.playerName][self.classToken] == self.spellToken ) then
-		PaladinBuffer:AssignBlessing(self.playerName, "none", self.classToken)
-		return
+		spellToken = "none"
 	end
 			
-	PaladinBuffer:AssignBlessing(self.playerName, self.spellToken, self.classToken)
+	if( IsShiftKeyDown() ) then
+		for _, classToken in pairs(classes) do
+			if( blacklisted[classToken] ~= spellToken ) then
+				PaladinBuffer:AssignBlessing(self.playerName, spellToken, classToken)
+			end
+		end
+	else
+		PaladinBuffer:AssignBlessing(self.playerName, spellToken, self.classToken)
+	end
 end
 
 -- Assignment buttons for each class
