@@ -594,7 +594,7 @@ local function assignmentUpdate(...)
 	end
 end
 
-local function updatePermissions()
+function Assign:UpdatePermissions()
 	Assign:UpdatePlayerRows()
 	Assign:UpdateClassAssignments()
 end
@@ -614,13 +614,13 @@ local function OnShow(self)
 	Assign:RegisterMessage("PB_ASSIGNED_BLESSINGS", "UpdateAssignments")
 	
 	-- Roster/permissions changed, need to update permissions
-	Assign:RegisterMessage("PB_PERMISSIONS_UPDATED", updatePermissions)
-	Assign:RegisterMessage("PB_ROSTER_UPDATED", updatePermissions)
-	
+	Assign:RegisterMessage("PB_PERMISSIONS_UPDATED", "UpdatePermissions")
+	Assign:RegisterMessage("PB_ROSTER_UPDATED", "UpdatePermissions")
+		
 	-- What blessings they can cast changed
 	Assign:RegisterMessage("PB_RESET_SPELLS", "UpdateAssignments")
 	Assign:RegisterMessage("PB_SPELL_DATA", "UpdateAssignments")
-	
+		
 	-- Position
 	if( PaladinBuffer.db.profile.position ) then
 		local scale = self:GetEffectiveScale()

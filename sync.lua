@@ -20,16 +20,16 @@ function Sync:Disable()
 end
 
 function Sync:SendAssignmentReset()
-	self:SendMessage("CLEAR")
+	self:SendAddonMessage("CLEAR")
 	
 	if( PaladinBuffer.db.profile.ppSupport ) then
-		Sync:SendMessage("CLEAR", "PLPWR")
+		self:SendAddonMessage("CLEAR", "PLPWR")
 	end
 end
 
 function Sync:RequestData()
 	-- Request data from PaladinBuffer users
-	self:SendMessage("REQUEST: " .. tostring(PaladinBuffer.db.profile.ppSupport))
+	self:SendAddonMessage("REQUEST: " .. tostring(PaladinBuffer.db.profile.ppSupport))
 	
 	-- Request data from Pally Power users
 	-- will do a small 0.5 delay so that PB users will see that they should ignore any syncs that are sent as compats
@@ -41,7 +41,7 @@ function Sync:RequestData()
 				timeElapsed = timeElapsed - elapsed
 				
 				if( timeElapsed <= 0 ) then
-					Sync:SendMessage("REQ", "PLPWR")
+					Sync:SendAddonMessage("REQ", "PLPWR")
 					self:Hide()
 				end
 			end)
@@ -79,7 +79,7 @@ function Sync:SendAssignments()
 	
 	-- Off we go!
 	if( assignText ) then
-		self:SendMessage(string.format("RASSIGN: %s", assignText))
+		self:SendAddonMessage(string.format("RASSIGN: %s", assignText))
 	end
 	
 	-- Send assignments out in a PP format
@@ -118,12 +118,12 @@ function Sync:SendPersonalAssignment()
 	end
 	
 	-- Send it off
-	self:SendMessage(string.format("MYDATA: %s;%s;%s", (talentList or ""), (assignList or ""), PaladinBuffer.db.profile.requireLeader and "true" or "false"))
+	self:SendAddonMessage(string.format("MYDATA: %s;%s;%s", (talentList or ""), (assignList or ""), PaladinBuffer.db.profile.requireLeader and "true" or "false"))
 end
 
 function Sync:SendLeaderRequirements()
-	self:SendMessage(string.format("FREEASSIGN %s", PaladinBuffer.db.profile.requireLeader and "NO" or "YES"), "PLPWR")
-	self:SendMessage(string.format("LEADER: %s", PaladinBuffer.db.profile.requireLeader and "true" or "false"))
+	self:SendAddonMessage(string.format("FREEASSIGN %s", PaladinBuffer.db.profile.requireLeader and "NO" or "YES"), "PLPWR")
+	self:SendAddonMessage(string.format("LEADER: %s", PaladinBuffer.db.profile.requireLeader and "true" or "false"))
 end
 
 -- PARSING SYNC DATA
@@ -225,7 +225,7 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	
 	-- Requesting symbol totals
 	elseif( cmd == "SYMREQUEST" and arg and PaladinBuffer:HasPermission(sender) ) then
-		self:SendMessage(string.format("SYMBOLS: %d", GetItemCount("item:21177")))
+		self:SendAddonMessage(string.format("SYMBOLS: %d", GetItemCount("item:21177")))
 	
 	-- Clear assignments from people
 	elseif( cmd == "CLEAR" and PaladinBuffer:HasPermission(sender) ) then
@@ -236,7 +236,7 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	end
 end
 
-function Sync:SendMessage(msg, prefix)
+function Sync:SendAddonMessage(msg, prefix)
 	self:SendCommMessage(prefix or "PALB", msg, "RAID")
 end
  
@@ -294,21 +294,21 @@ local function sendPP()
 				spellAssigned = "spam"
 			-- This is a single assignment, so send it regardless
 			elseif( not classList[target] and UnitExists(target) ) then
-				Sync:SendMessage(string.format("NASSIGN %s %d %s %d", name, classConversions[select(2, UnitClass(target))], target, tonumber(singleConversions[spellToken]) or 0), "PLPWR")
+				Sync:SendAddonMessage(string.format("NASSIGN %s %d %s %d", name, classConversions[select(2, UnitClass(target))], target, tonumber(singleConversions[spellToken]) or 0), "PLPWR")
 			end
 		end
 		
 		-- They are assigned to it, so we can do a mass to save bandwidth
 		if( spellAssigned and spellAssigned ~= "none" and spellAssigned ~= "spam" ) then
-			Sync:SendMessage(string.format("MASSIGN %s %s", name, greaterConversions[spellAssigned]), "PLPWR")
+			Sync:SendAddonMessage(string.format("MASSIGN %s %s", name, greaterConversions[spellAssigned]), "PLPWR")
 		-- Nope, :( send it as singles
 		else
 			-- Send that we don't have pets assigned
-			Sync:SendMessage(string.format("ASSIGN %s 11 0", name), "PLPWR")
+			Sync:SendAddonMessage(string.format("ASSIGN %s 11 0", name), "PLPWR")
 			
 			for target, spellToken in pairs(assignments) do
 				if( classList[target] ) then
-					Sync:SendMessage(string.format("ASSIGN %s %d %s", name, classConversions[target], tonumber(greaterConversions[spellToken]) or 0), "PLPWR")
+					Sync:SendAddonMessage(string.format("ASSIGN %s %d %s", name, classConversions[target], tonumber(greaterConversions[spellToken]) or 0), "PLPWR")
 				end
 			end
 		end
@@ -329,7 +329,7 @@ end)
 
 function Sync:SendPPAssignments()
 	-- Clear everything
-	Sync:SendMessage("CLEAR", "PLPWR")
+	Sync:SendAddonMessage("CLEAR", "PLPWR")
 	
 	-- Wait half a second so we can be more sure that it was actually all cleared before ours is sent out
 	timeElapsed = 0.50
@@ -348,6 +348,10 @@ local function constructRankString(spellText, spellToken)
 end
 
 function Sync:SendPPData()
+	if( PaladinBuffer.disabled ) then
+		return
+	end
+	
 	-- Compile the list of what we have trained/talented
 	local spellText = ""
 	spellText = constructRankString(spellText, "gwisdom")
@@ -364,9 +368,9 @@ function Sync:SendPPData()
 	end
 	
 	-- Send it off
-	self:SendMessage(string.format("SELF %s@%s", spellText, assignText), "PLPWR")
+	self:SendAddonMessage(string.format("SELF %s@%s", spellText, assignText), "PLPWR")
 	-- No we don't want anyone to do our assignments
-	self:SendMessage(string.format("FREEASSIGN %s", PaladinBuffer.db.profile.requireLeader and "NO" or "YES"), "PLPWR")
+	self:SendAddonMessage(string.format("FREEASSIGN %s", PaladinBuffer.db.profile.requireLeader and "NO" or "YES"), "PLPWR")
 end
 
 function Sync:ParsePPBlessingData(sender, singleType, greaterType, rank, improved)

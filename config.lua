@@ -176,7 +176,7 @@ local function loadOptions()
 						order = 6,
 						type = "range",
 						name = L["Scale"],
-						min = 0, max = 1.0, step = 0.01,
+						min = 0, max = 2.0, step = 0.01,
 						set = setNumber,
 					},
 					columns = {

@@ -155,7 +155,7 @@ function PaladinBuffer:AssignBlessing(caster, spellToken, assignment)
 	setupPlayerData(caster)
 	
 	-- Check if the blessing was already assigned, if so cancel it for the other person
-	if( spellToken ~= "none" ) then
+	if( spellToken ~= "none" and not classList[assignment] ) then
 		for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
 			if( name ~= caster and assignments[assignment] == spellToken ) then
 				assignments[assignment] = "none"
