@@ -69,6 +69,18 @@ local function loadOptions()
 						desc = L["Allows you to both send and receive assignments from Pally Power users."],
 						width = "full",
 					},
+					requireLeader = {
+						order = 0.25,
+						type = "toggle",
+						name = L["Require leader or assist to change assignments"],
+						desc = L["Only accepts assignments from people who have either assist or leader, this does NOT apply to parties where any Paladin can change them."],
+					},
+					offline = {
+						order = 0.5,
+						type = "toggle",
+						name = L["Wait for offline players before buffing"],
+						desc = L["Will not buff a class until all offline players are back online and in range."],
+					},
 					greaterBinding = {
 						order = 1,
 						type = "keybinding",
@@ -87,7 +99,6 @@ local function loadOptions()
 						name = L["Assignment frame scale"],
 						min = 0, max = 2, step = 0.01,
 						set = setNumber,
-						width = "full",
 					},
 					rangeThreshold = {
 						order = 4,
@@ -97,16 +108,24 @@ local function loadOptions()
 						min = 0, max = 1.0, step = 0.01,
 						set = setNumber,
 					},
-					timeThreshold = {
+					greaterThreshold = {
 						order = 5,
 						type = "range",
-						name = L["Percentage left until rebuff"],
-						desc = L["Percentage of how much time should be left on a buff before recasting it, 50% means that Greater Blessings have to be at or below 15 minutes, and single blessings at or below 5 minutes."],
-						min = 0, max = 1.0, step = 0.01,
+						name = L["Greater rebuff threshold"],
+						desc = L["How many minutes should be left on a greater blessing before it's recasted."],
+						min = 0, max = 30, step = 1,
+						set = setNumber,
+					},
+					singleThreshold = {
+						order = 6,
+						type = "range",
+						name = L["Single rebuff threshold"],
+						desc = L["How many minutes should be left on a single blessing before it's recasted."],
+						min = 0, max = 10, step = 1,
 						set = setNumber,
 					},
 					inside = {
-						order = 6,
+						order = 7,
 						type = "multiselect",
 						name = L["Enable mod inside"],
 						desc = L["Allows you to choose which scenarios this mod should be enabled in."],
@@ -134,6 +153,7 @@ local function loadOptions()
 						order = 2,
 						type = "toggle",
 						name = L["Locked"],
+						desc = L["You can move the buff frame by ALT + dragging the smart buff frame window while the frame is unlocked."],
 					},
 					growUp = {
 						order = 3,

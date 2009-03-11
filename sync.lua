@@ -1,7 +1,7 @@
 if( not PaladinBuffer ) then return end
 
 local Sync = PaladinBuffer:NewModule("Sync", "AceEvent-3.0", "AceComm-3.0")
-local classList, timerFrame
+local classList, timerFrame, freeAssign
 local supportsPP, requestThrottle = {}, {}
 local playerName = UnitName("player")
 local THROTTLE_TIME = 5
@@ -11,6 +11,7 @@ function Sync:Enable()
 	self.RegisterComm(self, "PALB")
 
 	classList = PaladinBuffer.classList
+	freeAssign = PaladinBuffer.freeAssign
 end
 
 function Sync:Disable()
@@ -117,7 +118,12 @@ function Sync:SendPersonalAssignment()
 	end
 	
 	-- Send it off
-	self:SendMessage(string.format("MYDATA: %s;%s", (talentList or ""), (assignList or "")))
+	self:SendMessage(string.format("MYDATA: %s;%s;%s", (talentList or ""), (assignList or ""), PaladinBuffer.db.profile.requireLeader and "true" or "false"))
+end
+
+function Sync:SendLeaderRequirements()
+	self:SendMessage(string.format("FREEASSIGN %s", PaladinBuffer.db.profile.requireLeader and "NO" or "YES"), "PLPWR")
+	self:SendMessage(string.format("LEADER: %s", PaladinBuffer.db.profile.requireLeader and "true" or "false"))
 end
 
 -- PARSING SYNC DATA
@@ -197,8 +203,12 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 		
 	-- We got this persons assignments
 	elseif( cmd == "MYDATA" and arg and playerName ~= sender ) then
-		local talents, assignments = string.split(";", arg)
+		local talents, assignments, leaderRequired = string.split(";", arg)
 		if( talents and assignments ) then
+			-- You need assist or leader to change there assignments
+			freeAssign[sender] = (leaderRequired == "true") and false or true
+			self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
+
 			-- It's implied that if the information wasn't sent in this that they aren't assigned to it
 			-- we basically trade a trivial amount of CPU (resetting two tables) for less comm data sent through the addon channels
 			PaladinBuffer:ResetBlessingData(sender)
@@ -207,7 +217,12 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 			self:ParseTalents(sender, string.split(":", talents))
 			self:ParseAssignments(sender, string.split(":", assignments))
 		end
-		
+	
+	-- Leadership required?
+	elseif( cmd == "LEADER" and arg and playerName ~= sender ) then
+		freeAssign[sender] = (leaderRequired == "true") and false or true
+		self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
+	
 	-- Requesting symbol totals
 	elseif( cmd == "SYMREQUEST" and arg and PaladinBuffer:HasPermission(sender) ) then
 		self:SendMessage(string.format("SYMBOLS: %d", GetItemCount("item:21177")))
@@ -351,7 +366,7 @@ function Sync:SendPPData()
 	-- Send it off
 	self:SendMessage(string.format("SELF %s@%s", spellText, assignText), "PLPWR")
 	-- No we don't want anyone to do our assignments
-	self:SendMessage("FREEASSIGN YES", "PLPWR")
+	self:SendMessage(string.format("FREEASSIGN %s", PaladinBuffer.db.profile.requireLeader and "NO" or "YES"), "PLPWR")
 end
 
 function Sync:ParsePPBlessingData(sender, singleType, greaterType, rank, improved)
@@ -390,7 +405,7 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 	end
 
 	-- Request our data
-	if( cmd == "REQ" and PaladinBuffer:HasPermission(sender) ) then
+	if( cmd == "REQ" ) then
 		-- We already got a request from this person, and it's still throttled
 		if( requestThrottle[sender] and requestThrottle[sender] >= GetTime() ) then
 			return
@@ -464,7 +479,9 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 		end
 	
 	-- Should I support this?
-	elseif( cmd == "FREEASSIGN" ) then
+	elseif( cmd == "FREEASSIGN" and arg and playerName ~= sender ) then
+		freeAssign[sender] = ( arg == "YES" ) and true or false
+		self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
 	
 	-- Clear requested data
 	elseif( cmd == "CLEAR" and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then

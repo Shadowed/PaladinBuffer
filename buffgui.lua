@@ -4,7 +4,7 @@ local Buff = PaladinBuffer:NewModule("BuffGUI", "AceEvent-3.0")
 local L = PaladinBufferLocals
 local blessings = {[GetSpellInfo(56520)] = "might", [GetSpellInfo(48934)] = "gmight", [GetSpellInfo(56521)] = "wisdom", [GetSpellInfo(48938)] = "gwisdom", [GetSpellInfo(20911)] = "sanct", [GetSpellInfo(25899)] = "gsanct", [GetSpellInfo(20217)] = "kings", [GetSpellInfo(25898)] = "gkings"}
 local blessingIcons = {["gmight"] = select(3, GetSpellInfo(48934)), ["gwisdom"] = select(3, GetSpellInfo(48938)), ["gsanct"] = select(3, GetSpellInfo(25899)),["gkings"] = select(3, GetSpellInfo(25898)), ["might"] = select(3, GetSpellInfo(56520)), ["wisdom"] = select(3, GetSpellInfo(56521)), ["sanct"] = select(3, GetSpellInfo(20911)), ["kings"] = select(3, GetSpellInfo(20217))}
-local auraUpdates, singleTimes, greaterTimes, singleTypes, greaterTypes = {}, {}, {}, {}, {}, {}
+local auraUpdates, singleTimes, greaterTimes, singleTypes, greaterTypes = {}, {}, {}, {}, {}
 local playerName = UnitName("player")
 local inCombat
 
@@ -12,6 +12,10 @@ local GREATER_DURATION = 1800
 local SINGLE_DURATION = 600
 
 function Buff:Enable()
+	if( PaladinBuffer.disabled ) then
+		return
+	end
+	
 	assignments = PaladinBuffer.db.profile.assignments[UnitName("player")]
 	groupRoster = PaladinBuffer.groupRoster
 	inCombat = InCombatLockdown()
@@ -99,7 +103,7 @@ function Buff:UpdateColorStatus(frame, filter)
 	
 	for name, unit in pairs(groupRoster) do
 		local classToken = select(2, UnitClass(unit))
-		if( ( classToken == filter or filter == "ALL" ) and UnitIsConnected(unit) ) then
+		if( ( classToken == filter or filter == "ALL" ) and ( PaladinBuffer.db.profile.offline or UnitIsConnected(unit) ) ) then
 			local greaterBlessing = PaladinBuffer.blessings[assignments[classToken]]
 			
 			-- Are we assigned to cast a single on this person?
@@ -145,9 +149,9 @@ function Buff:UpdateColorStatus(frame, filter)
 		needRecast = "greater"
 	elseif( hasSingleMissing ) then
 		needRecast = "single"
-	elseif( lowestSingle and ((lowestSingle - time) / SINGLE_DURATION) < PaladinBuffer.db.profile.timeThreshold ) then
+	elseif( lowestSingle and ((lowestSingle - time) / 60) < PaladinBuffer.db.profile.singleThreshold ) then
 		needRecast = "single"
-	elseif( lowestGreater and ((lowestGreater - time) / GREATER_DURATION) < PaladinBuffer.db.profile.timeThreshold ) then
+	elseif( lowestGreater and ((lowestGreater - time) / 60) < PaladinBuffer.db.profile.greaterThreshold ) then
 		needRecast = "greater"		
 	end
 		
@@ -178,11 +182,11 @@ function Buff:FindLowestTime(classFilter, blessingName)
 	
 	for name, unit in pairs(groupRoster) do
 		local classToken = select(2, UnitClass(unit))
-		if( classToken == classFilter and UnitIsConnected(unit) ) then
+		if( classToken == classFilter and ( PaladinBuffer.db.profile.offline or UnitIsConnected(unit) ) ) then
 			classTotal = classTotal + 1
 						
 			-- Are they online?
-			--if( UnitIsConnected(totalOnline) ) then
+			--if( UnitIsConnected(unit) ) then
 			--	totalOnline = totalOnline + 1
 			--end
 			
@@ -235,7 +239,12 @@ function Buff:FindLowestTime(classFilter, blessingName)
 	end
 
 	-- Either we don't have this buff on the class yet, or we do but the time is below the threshold percent
-	if( hasBuff < visibleRange or not lowestTime or (lowestTime / spellDuration) < PaladinBuffer.db.profile.timeThreshold ) then
+	local timeType = "singleThreshold"
+	if( PaladinBuffer.blessingTypes[blessingName] == "greater" ) then
+		timeType = "greaterThreshold"
+	end
+	
+	if( hasBuff < visibleRange or not lowestTime or (lowestTime / 60) < PaladinBuffer.db.profile[timeType] ) then
 		return "cast", inSpellRange, (lowestTime or 0)
 	end
 	
@@ -308,7 +317,7 @@ function Buff:AutoBuffLowestSingle(button, filter)
 	-- Everyone has the buff, so check if the lowest is below the threshold
 	if( not lowestTime and castSpell and castSpellOn ) then
 		return "spell", castSpellOn, castSpell
-	elseif( lowestTime and (lowestTime / SINGLE_DURATION) < PaladinBuffer.db.profile.timeThreshold ) then
+	elseif( lowestTime and (lowestTime / 60) < PaladinBuffer.db.profile.singleThreshold ) then
 		return "spell", castSpellOn, castSpell
 	else
 		return nil, nil, nil
@@ -445,15 +454,14 @@ local function OnUpdate(self, elapsed)
 	end
 end
 
-function Buff:CreateSingleFrame()
-	local frame = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate")
+function Buff:CreateSingleFrame(parent)
+	local frame = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate")
 	frame:SetFrameStrata("MEDIUM")
 	frame:SetHeight(30)
 	frame:SetWidth(95)
 	frame:SetBackdrop(self.backdrop)
 	frame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
 	frame:SetBackdropBorderColor(0.75, 0.75, 0.75, 0.90)
-	frame:SetScale(PaladinBuffer.db.profile.frame.scale)
 	frame:SetScript("OnShow", updateTimer)
 	frame:SetScript("OnUpdate", OnUpdate)
 	frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 450, -100)
@@ -542,11 +550,12 @@ function Buff:CreateFrame()
 	end
 	
 	-- Create it all!
-	self.frame = self:CreateSingleFrame()
+	self.frame = self:CreateSingleFrame(UIParent)
 	self.frame.singleIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion"
 	self.frame.greaterIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion_02"
 	self.frame.filter = "ALL"
 	self.frame.title:SetText(L["Smart buff"])
+	self.frame:SetScale(PaladinBuffer.db.profile.frame.scale)
 	self.frame.classes = {}
 	self.frame:SetScript("OnShow", OnShow)
 	self.frame:SetScript("OnMouseDown", OnMouseDown)
@@ -591,7 +600,7 @@ function Buff:UpdateClassFrames()
 		local class, classToken = UnitClass(unit)
 		if( class and classToken ) then
 			if( not self.frame.classes[classToken] ) then
-				self.frame.classes[classToken] = self:CreateSingleFrame()
+				self.frame.classes[classToken] = self:CreateSingleFrame(self.frame)
 				self.frame.classes[classToken].filter = classToken
 				self.frame.classes[classToken].title:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[classToken].r, 255 * RAID_CLASS_COLORS[classToken].g, 255 * RAID_CLASS_COLORS[classToken].b, class)
 			end
@@ -637,7 +646,7 @@ function Buff:PositionClassFrames()
 				frame:ClearAllPoints()
 				
 				if( PaladinBuffer.db.profile.frame.growUp ) then
-					frame:SetPoint("BOTTOMLEFT", previousRow, "BOTTOMRIGHT", 2, 1)    
+					frame:SetPoint("BOTTOMLEFT", previousRow, "BOTTOMRIGHT", 2, 0)    
 				else
 					frame:SetPoint("TOPLEFT", previousRow, "TOPRIGHT", 2, 0)    
 				end
@@ -648,15 +657,22 @@ function Buff:PositionClassFrames()
 			id = id + 1
 		end
 	end
+	
+	-- Reposition the main frame as well
+	self.frame:ClearAllPoints()
+
+	if( PaladinBuffer.db.profile.frame.position ) then
+		local scale = self.frame:GetEffectiveScale()
+		self.frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", PaladinBuffer.db.profile.frame.position.x / scale, PaladinBuffer.db.profile.frame.position.y / scale)
+	else
+		self.frame:SetPoint("CENTER", UIParent, "CENTER")
+	end
+	
 end
 
 function Buff:Reload()
 	if( self.frame ) then
 		self.frame:SetScale(PaladinBuffer.db.profile.frame.scale)
-		for _, frame in pairs(self.frame.classes) do
-			frame:SetScale(PaladinBuffer.db.profile.frame.scale)
-		end
-		
 		self:PositionClassFrames()
 	end
 end

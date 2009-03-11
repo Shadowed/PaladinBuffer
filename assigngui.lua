@@ -3,6 +3,7 @@ if( not PaladinBuffer ) then return end
 local Assign = PaladinBuffer:NewModule("AssignGUI", "AceEvent-3.0")
 local L = PaladinBufferLocals
 
+local playerName = UnitName("player")
 local groupList, displayList, classTotals
 local MAX_GROUP_ROWS = 14
 local ROW_HEIGHT = 17
@@ -129,19 +130,19 @@ function Assign:UpdateAssignmentButtons(rowID)
 			columns[rowID]:Show()
 			
 			for _, icon in pairs(columns[rowID].icons) do
-				if( blessingData[icon.spellToken] and blacklisted[icon.classToken] ~= icon.spellToken ) then
+				if( ( row.playerName == playerName or PaladinBuffer.freeAssign[row.playerName] or PaladinBuffer:HasPermission(playerName) ) and blessingData[icon.spellToken] and blacklisted[icon.classToken] ~= icon.spellToken ) then
 					SetDesaturation(icon:GetNormalTexture(), nil)
 
 					icon:EnableMouse(true)
 					icon:SetAlpha(assignData[icon.classToken] ~= icon.spellToken and 0.40 or 1.0)
-					icon.playerName = self.rows[rowID].playerName
+					icon.playerName = row.playerName
 					icon.disabled = nil
 					icon:Show()
 				else
 					SetDesaturation(icon:GetNormalTexture(), true)
 
 					icon:EnableMouse(false)
-					icon:SetAlpha(0.10)
+					icon:SetAlpha(0.80)
 					icon.disabled = true
 					icon:Show()
 				end
@@ -171,7 +172,7 @@ end
 -- Create an icon listing of what blessings they have + talents
 function Assign:UpdateBlessingInfo(rowID)
 	local row = self.rows[rowID]
-	
+		
 	local bID = 0
 	for spellToken, rank in pairs(PaladinBuffer.db.profile.blessings[row.playerName]) do
 		if( PaladinBuffer.blessingTypes[spellToken] == "greater" ) then
@@ -268,9 +269,14 @@ function Assign:UpdatePlayerRows()
 			
 			self:CreateAssignmentButtons(rowID)
 		end
-				
+		
+		if( name ~= playerName and not PaladinBuffer.freeAssign[name] and not PaladinBuffer:HasPermission(playerName) ) then
+			row.text:SetFormattedText("%s%s|r", RED_FONT_COLOR_CODE, name)
+		else
+			row.text:SetText(name)
+		end
+
 		row.playerName = name
-		row.text:SetText(name)
 		row:Show()
 	end
 	
@@ -499,7 +505,7 @@ local function assignSingleBlessing(self)
 end
 
 -- Create the single assignment UI
-function Assign:CeateSingleFrame()
+function Assign:CreateSingleFrame()
 	if( self.singleFrame ) then
 		return
 	end
@@ -523,7 +529,7 @@ function Assign:CeateSingleFrame()
 		Assign:UpdateSingle()
 	end)
 	self.singleFrame:SetScript("OnHide", function()
-		Assign:UnregisterMessage("PB_ROSTER_UPDATED", "UpdateGroupList")
+		Assign:UnregisterMessage("PB_ROSTER_UPDATED")
 	end)
 	self.singleFrame:Hide()
 
@@ -571,33 +577,37 @@ function Assign:CeateSingleFrame()
 end
 
 -- Frame shown, so we want to be updating the UI
+local function assignmentUpdate(...)
+	Assign:UpdatePlayerRows()
+	Assign:UpdateAssignments(...)
+
+	if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
+		Assign:UpdateSingle()
+	end
+end
+
+local function updatePermissions()
+	Assign:UpdatePlayerRows()
+	Assign:UpdateClassAssignments()
+end
+
 local function OnShow(self)
 	Assign:UpdatePlayerRows()
 	Assign:UpdateAssignments()
 	
 	-- New player found, will need to update rows
-	Assign:RegisterMessage("PB_DISCOVERED_PLAYER", function(event, caster)
-		Assign:UpdatePlayerRows()
-		Assign:UpdateAssignments(nil, caster)
-
-		if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
-			Assign:UpdateSingle()
-		end
-	end)
+	Assign:RegisterMessage("PB_DISCOVERED_PLAYER", assignmentUpdate)
 
 	-- All assignments reset, so we can hide most of the UI
-	Assign:RegisterMessage("PB_RESET_ASSIGNMENTS", function(event, caster)
-		Assign:UpdatePlayerRows()
-		Assign:UpdateAssignments()
-		
-		if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
-			Assign:UpdateSingle()
-		end
-	end)
+	Assign:RegisterMessage("PB_RESET_ASSIGNMENTS", assignmentUpdate)
 
 	-- What blessings they were assigned changed
 	Assign:RegisterMessage("PB_CLEARED_ASSIGNMENTS", "UpdateAssignments")
 	Assign:RegisterMessage("PB_ASSIGNED_BLESSINGS", "UpdateAssignments")
+	
+	-- Roster/permissions changed, need to update permissions
+	Assign:RegisterMessage("PB_PERMISSIONS_UPDATED", updatePermissions)
+	Assign:RegisterMessage("PB_ROSTER_UPDATED", updatePermissions)
 	
 	-- What blessings they can cast changed
 	Assign:RegisterMessage("PB_RESET_SPELLS", "UpdateAssignments")
@@ -661,7 +671,7 @@ end
 
 -- Show the single blessing UI
 local function singleAssignBlessings()
-	Assign:CeateSingleFrame()
+	Assign:CreateSingleFrame()
 	
 	if( Assign.singleFrame:IsVisible() ) then
 		Assign.singleFrame:Hide()

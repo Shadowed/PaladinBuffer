@@ -6,7 +6,7 @@ PaladinBuffer = LibStub("AceAddon-3.0"):NewAddon("PaladinBuffer", "AceEvent-3.0"
 
 local L = PaladinBufferLocals
 local playerName = UnitName("player")
-local raidUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData = {}, {}, {}, {}, {}, {}
+local raidUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData, freeAssign = {}, {}, {}, {}, {}, {}, {}
 local improved = {[GetSpellInfo(20244)] = {"wisdom", "gwisdom"}, [GetSpellInfo(20042)] = {"might", "gmight"}}
 local blessingTypes = {["gmight"] = "greater", ["gwisdom"] = "greater", ["gkings"] = "greater", ["gsanct"] = "greater", ["might"] = "single", ["wisdom"] = "single", ["kings"] = "single", ["sanct"] = "single"}
 local blessings = {["might"] = GetSpellInfo(56520), ["gmight"] = GetSpellInfo(48934), ["wisdom"] = GetSpellInfo(56521), ["gwisdom"] = GetSpellInfo(48938), ["sanct"] = GetSpellInfo(20911), ["gsanct"] = GetSpellInfo(25899), ["kings"] = GetSpellInfo(20217), ["gkings"] = GetSpellInfo(25898)}
@@ -16,11 +16,14 @@ function PaladinBuffer:OnInitialize()
 	self.defaults = {
 		profile = {
 			ppSupport = true,
+			requireLeader = true,
 			greaterbinding = "CTRL-1",
 			singleBinding = "CTRL-2",
 			scale = 1.0,
 			rangeThreshold = 1.0,
-			timeThreshold = 0.50,
+			singleThreshold = 5,
+			greaterThreshold = 15,
+			offline = false,
 			blessings = {},
 			assignments = {},
 			inside = {["raid"] = true, ["party"] = true, ["none"] = true},
@@ -59,6 +62,7 @@ function PaladinBuffer:OnInitialize()
 	local setup
 	if( not self.disabled and not self.db.profile.assignments[playerName] ) then
 		self.db.profile.assignments[playerName] = {}
+		self.db.profile.blessings[playerName] = {}
 		setup = true
 	end
 	
@@ -81,6 +85,7 @@ function PaladinBuffer:OnInitialize()
 	self.raidUnits = raidUnits
 	self.partyUnits = partyUnits
 	self.groupRoster = groupRoster
+	self.freeAssign = freeAssign
 	
 	
 	-- Save a list of unitids
@@ -99,10 +104,12 @@ function PaladinBuffer:OnInitialize()
 end
 
 -- Do they have permission to assign us something?
-function PaladinBuffer:HasPermission(sender)
-	-- Not sure how comfortable I am with anyone in the group to be able to do this, I'll uncomment the persmissions line if I change my mind
-	--return sender and hasGroupRank[sender] or false
-	return true
+function PaladinBuffer:HasPermission(name)
+	if( not PaladinBuffer.db.profile.requireLeader ) then
+		return true
+	end
+	
+	return name and hasGroupRank[name] or false
 end
 
 -- Reset the players blessing assignments
@@ -268,6 +275,7 @@ end
 
 -- Raid roster was updated, reload it
 function PaladinBuffer:ScanGroup()
+	-- Reset data from previous scan
 	for k in pairs(groupRoster) do groupRoster[k] = nil end
 	for k in pairs(hasGroupRank) do hasGroupRank[k] = nil end
 
@@ -278,25 +286,24 @@ function PaladinBuffer:ScanGroup()
 		return
 	end
 	
+	-- Scan raid
 	for i=1, GetNumRaidMembers() do
 		local name = UnitName(raidUnits[i])
-		if( select(2, GetRaidRosterInfo(i)) ) then
+		if( select(2, GetRaidRosterInfo(i)) > 0 ) then
 			hasGroupRank[name] = true
 		end
 		
 		groupRoster[name] = raidUnits[i]
 	end
 
+	-- Not in a raid, so scan party
 	if( GetNumRaidMembers() == 0 ) then
 		groupRoster[playerName] = "player"
-		hasGroupRank[playerName] = UnitIsPartyLeader("player") and true or false
+		hasGroupRank[playerName] = true
 		
 		for i=1, GetNumPartyMembers() do
 			local name = UnitName(partyUnits[i])
-			if( UnitIsPartyLeader(partyUnits[i]) ) then
-				hasGroupRank[name] = true
-			end
-
+			hasGroupRank[name] = true
 			groupRoster[name] = partyUnits[i]
 		end
 	end
@@ -412,11 +419,18 @@ function PaladinBuffer:Echo(msg)
 	DEFAULT_CHAT_FRAME:AddMessage(msg)
 end
 
+local sentRequirements
 function PaladinBuffer:Reload()
 	instanceType = nil
 	self:ZONE_CHANGED_NEW_AREA()	
 	self:UpdateKeyBindings()
-		
+	
+	-- No sense in sending our leadership requirements if they didn't change
+	if( sentRequirements ~= PaladinBuffer.db.profile.requireLeader ) then
+		self.modules.Sync:SendLeaderRequirements()
+		sentRequires = PaladinBuffer.db.profile.requireLeader
+	end
+
 	-- Reload modules if needed
 	for _, module in pairs(self.modules) do
 		if( module.Reload ) then

@@ -28,6 +28,9 @@ PaladinBufferLocals = {
 	["Enable Pally Power support"] = "Enable Pally Power support",
 	["Allows you to both send and receive assignments from Pally Power users."] = "Allows you to both send and receive assignments from Pally Power users.",
 	
+	["Wait for offline players before buffing"] = "Wait for offline players before buffing",
+	["Will not buff a class until all offline players are back online and in range."] = "Will not buff a class until all offline players are back online and in range.",
+	
 	["Single buff binding"] = "Single buff binding",
 	["Binding to use for smart buffing your assigned single blessings."] = "Binding to use for smart buffing your assigned single blessings.",
 	
@@ -39,8 +42,15 @@ PaladinBufferLocals = {
 	["Percentage of in range to buff"] = "Percentage of in range to buff",
 	["How much percent of the players should be in range before using a Greater Blessing on there class. 90% for example means at least 90% of the people on the class have to be in range."] = "How much percent of the players should be in range before using a Greater Blessing on there class. 90% for example means at least 90% of the people on the class have to be in range.",
 	
-	["Percentage left until rebuff"] = "Percentage left until rebuff",
-		
+	["Greater rebuff threshold"] = "Greater rebuff threshold",
+	["How many minutes should be left on a greater blessing before it's recasted."] = "How many minutes should be left on a greater blessing before it's recasted.",
+	
+	["Single rebuff threshold"] = "Single rebuff threshold",
+	["How many minutes should be left on a single blessing before it's recasted."] = "How many minutes should be left on a single blessing before it's recasted.",
+	
+	["Require leader or assist to change assignments"] = "Require leader or assist to change assignments",
+	["Only accepts assignments from people who have either assist or leader, this does NOT apply to parties where any Paladin can change them."] = "Only accepts assignments from people who have either assist or leader, this does NOT apply to parties where any Paladin can change them.",
+	
 	["Enable mod inside"] = "Enable mod inside",
 	["Allows you to choose which scenarios this mod should be enabled in."] = "Allows you to choose which scenarios this mod should be enabled in.",
 	["Everywhere else"] = "Everywhere else",
@@ -61,6 +71,7 @@ PaladinBufferLocals = {
 	["Shows each classes buff status and lets you manually buff them with the required blessings."] = "Shows each classes buff status and lets you manually buff them with the required blessings.",
 	
 	["Locked"] = "Locked",
+	["You can move the buff frame by ALT + dragging the smart buff frame window while the frame is unlocked."] = "You can move the buff frame by ALT + dragging the smart buff frame window while the frame is unlocked.",
 	["Grow up"] = "Grow up",
 	["Scale"] = "Scale",
 
