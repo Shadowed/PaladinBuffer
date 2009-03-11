@@ -50,6 +50,7 @@ end
 
 function Buff:UpdateFrame()
 	if( self.frame and self.frame:IsVisible() ) then
+		self:ScanGroup()
 		self:UpdateAssignmentIcons()
 		self:UpdateAuraTimes()
 		
@@ -98,7 +99,7 @@ function Buff:UpdateColorStatus(frame, filter)
 	
 	for name, unit in pairs(groupRoster) do
 		local classToken = select(2, UnitClass(unit))
-		if( classToken == filter or filter == "ALL" ) then
+		if( ( classToken == filter or filter == "ALL" ) and UnitIsConnected(unit) ) then
 			local greaterBlessing = PaladinBuffer.blessings[assignments[classToken]]
 			
 			-- Are we assigned to cast a single on this person?
@@ -177,13 +178,13 @@ function Buff:FindLowestTime(classFilter, blessingName)
 	
 	for name, unit in pairs(groupRoster) do
 		local classToken = select(2, UnitClass(unit))
-		if( classToken == classFilter ) then
+		if( classToken == classFilter and UnitIsConnected(unit) ) then
 			classTotal = classTotal + 1
 						
 			-- Are they online?
-			if( UnitIsConnected(totalOnline) ) then
-				totalOnline = totalOnline + 1
-			end
+			--if( UnitIsConnected(totalOnline) ) then
+			--	totalOnline = totalOnline + 1
+			--end
 			
 			-- Blessings are done using visible range, so if they are within 100 yards, we can bless them
 			if( UnitIsVisible(unit) ) then
@@ -234,7 +235,7 @@ function Buff:FindLowestTime(classFilter, blessingName)
 	end
 
 	-- Either we don't have this buff on the class yet, or we do but the time is below the threshold percent
-	if( not lowestTime or (lowestTime / spellDuration) < PaladinBuffer.db.profile.timeThreshold ) then
+	if( hasBuff < visibleRange or not lowestTime or (lowestTime / spellDuration) < PaladinBuffer.db.profile.timeThreshold ) then
 		return "cast", inSpellRange, (lowestTime or 0)
 	end
 	

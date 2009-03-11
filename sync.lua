@@ -437,7 +437,7 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 		if( talents and assignments ) then
 			-- Parse talents/etc, we don't do the below parsing type because it's an ordered list
 			talents = string.trim(talents)
-						
+			
 			local wisdomRank, wisdomImproved, mightRank, mightImproved, kingsRank, kingsImproved, sanctRank, sanctImproved = string.match(talents, "([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])([0-9n])")
 			self:ParsePPBlessingData(sender, "wisdom", "gwisdom", tonumber(wisdomRank), tonumber(wisdomImproved))
 			self:ParsePPBlessingData(sender, "might", "gmight", tonumber(mightRank), tonumber(mightImproved))
