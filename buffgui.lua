@@ -383,7 +383,7 @@ local function updateTimer(self)
 		local lowestTime
 		for name, endTime in pairs(singleTimes) do
 			if( ( not lowestTime or lowestTime > endTime ) and UnitExists(name) ) then
-				if( self.filter == "ALL" or ( self.filter == select(2, UnitClass(name)) and singleTypes[name] == self.filter ) ) then
+				if( singleTypes[name] == assignments[name] and ( self.filter == "ALL" or self.filter == select(2, UnitClass(name)) ) ) then
 					lowestTime = endTime
 				end
 			end
@@ -402,7 +402,8 @@ local function updateTimer(self)
 	local lowestTime
 	for name, endTime in pairs(greaterTimes) do
 		if( ( not lowestTime or lowestTime > endTime ) and UnitExists(name) ) then
-			if( self.filter == "ALL" or ( self.filter == select(2, UnitClass(name)) and greaterTypes[name] == assignments[self.filter] ) ) then
+			local classToken = select(2, UnitClass(name))
+			if( greaterTypes[name] == assignments[classToken] and ( self.filter == "ALL" or self.filter == classToken ) ) then
 				lowestTime = endTime
 			end
 		end
