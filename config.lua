@@ -3,7 +3,7 @@ if( not PaladinBuffer ) then return end
 local Config = PaladinBuffer:NewModule("Config")
 local L = PaladinBufferLocals
 
-local registered, options, config, dialog
+local registered, options, config, dialog, colorTbl
 
 function Config:OnInitialize()
 	config = LibStub("AceConfig-3.0")
@@ -15,7 +15,7 @@ local function set(info, value)
 	if( info[#(info) - 1] ~= "general" ) then
 		PaladinBuffer.db.profile[info[#(info) - 1]][info[(#info)]] = value
 	else
-		PaladinBuffer.db.profile[info[(#info)]] = value
+		PaladinBuffer.db.profile[info[#(info)]] = value
 	end
 	
 	PaladinBuffer:Reload()
@@ -25,7 +25,7 @@ local function get(info)
 	if( info[#(info) - 1] ~= "general" ) then
 		return PaladinBuffer.db.profile[info[#(info) - 1]][info[(#info)]]
 	else
-		return PaladinBuffer.db.profile[info[(#info)]]
+		return PaladinBuffer.db.profile[info[#(info)]]
 	end
 end
 
@@ -34,12 +34,38 @@ local function setNumber(info, value)
 end
 
 local function setMulti(info, state, value)
-	PaladinBuffer.db.profile[info[(#info)]][state] = value
+	PaladinBuffer.db.profile[info[#(info)]][state] = value
 	PaladinBuffer:Reload()
 end
 
 local function getMulti(info, state)
-	return PaladinBuffer.db.profile[info[(#info)]][state]
+	return PaladinBuffer.db.profile[info[#(info)]][state]
+end
+
+local function setColor(info, r, g, b)
+	local subCat = info[#(info) - 1]
+	local key = info[#(info)]
+	
+	if( subCat ~= "general" ) then
+		PaladinBuffer.db.profile[subCat][key].r = r
+		PaladinBuffer.db.profile[subCat][key].g = g
+		PaladinBuffer.db.profile[subCat][key].b = b
+	else
+		PaladinBuffer.db.profile[key].r = r
+		PaladinBuffer.db.profile[key].g = g
+		PaladinBuffer.db.profile[key].b = b
+	end
+	
+	PaladinBuffer:Reload()
+end
+
+local function getColor(info)
+	local value = get(info)
+	if( type(value) == "table" ) then
+		return value.r, value.g, value.b
+	end
+	
+	return value
 end
 
 local function loadOptions()
@@ -142,50 +168,81 @@ local function loadOptions()
 				inline = true,
 				name = L["Buff frame"],
 				args = {
-					enabled = {
-						order = 1,
-						type = "toggle",
-						name = L["Enable buff frame"],
-						desc = L["Enables showing the smart buff frame while in a group."],
-						width = "full",
-					},
 					locked = {
-						order = 2,
+						order = 0,
 						type = "toggle",
 						name = L["Locked"],
 						desc = L["You can move the buff frame by ALT + dragging the smart buff frame window while the frame is unlocked."],
+						width = "full",
+					},
+					enabled = {
+						order = 1,
+						type = "toggle",
+						name = L["Enable overall frame"],
+						desc = L["Shows the lowest greater and single blessings for all classes, also lets you smart buff all classes through them."],
+					},
+					classes = {
+						order = 2,
+						type = "toggle",
+						name = L["Enable class status on buff frame"],
+						desc = L["Shows each classes buff status and lets you manually buff them with the required blessings."],
 					},
 					growUp = {
 						order = 3,
 						type = "toggle",
 						name = L["Grow up"],
 					},
-					classes = {
-						order = 4,
-						type = "toggle",
-						name = L["Enable class status on buff frame"],
-						desc = L["Shows each classes buff status and lets you manually buff them with the required blessings."],
-					},
 					hideInCombat = {
-						order = 5,
+						order = 4,
 						type = "toggle",
 						name = L["Hide in combat"],
 						desc = L["Hides the entire buff frame while you are in combat."],
 					},
 					scale = {
-						order = 6,
+						order = 5,
 						type = "range",
 						name = L["Scale"],
 						min = 0, max = 2.0, step = 0.01,
 						set = setNumber,
 					},
 					columns = {
-						order = 7,
+						order = 6,
 						type = "range",
 						name = L["Columns"],
 						desc = L["How many columns to show, 1 for example will show a single straight line."],
 						min = 1, max = 11, step = 1,
 						set = setNumber,
+					},
+					background = {
+						order = 8,
+						type = "color",
+						name = L["Background color"],
+						set = setColor,
+						get = getColor,
+					},
+					border = {
+						order = 9,
+						type = "color",
+						name = L["Border color"],
+						desc = L["How many columns to show, 1 for example will show a single straight line."],
+						set = setColor,
+						get = getColor,
+					},
+					needRebuff = {
+						order = 10,
+						type = "color",
+						name = L["Can rebuff color"],
+						desc = L["Background color for the buff frame when you need to rebuff (Blessings below the set time) AND all players are within range."],
+						set = setColor,
+						get = getColor,
+					},
+					cantRebuff = {
+						order = 11,
+						type = "color",
+						name = L["Cannot rebuff color"],
+						desc = L["Background color when you need to rebuff (Blessings below the set time) BUT there are players out of range."],
+						set = setColor,
+						get = getColor,
 					},
 				},
 			},
@@ -200,7 +257,7 @@ end
 
 -- Slash commands
 SLASH_PALADINBUFF1 = "/paladinbuff"
-SLASH_PALADINBUFF2 = "/paladinbuffer"
+SLASH_PALADINBUFF2 = "/PaladinBuffer"
 SLASH_PALADINBUFF3 = "/pb"
 SlashCmdList["PALADINBUFF"] = function(msg)
 	msg = string.lower(msg or "")

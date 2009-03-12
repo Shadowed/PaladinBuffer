@@ -35,6 +35,10 @@ function PaladinBuffer:OnInitialize()
 				growUp = false,
 				scale = 1.0,
 				columns = 1,
+				border = {r = 0.75, g = 0.75, b = 0.75},
+				background = {r = 0, g = 0, b = 0},
+				needRebuff = {r = 0.70, g = 0.10, b = 0.10},
+				cantRebuff = {r = 0.80, g = 0.80, b = 0.10},
 			},
 		},
 	}
@@ -55,6 +59,7 @@ function PaladinBuffer:OnInitialize()
 	self:RegisterEvent("RAID_ROSTER_UPDATE", "ScanGroup")
 	self:RegisterEvent("PARTY_MEMBERS_CHANGED", "ScanGroup")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
+	self:RegisterEvent("PLAYER_REGEN_DISABLED")
 	self:RegisterEvent("SPELLS_CHANGED", "ScanSpells")
 	self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 		
@@ -73,7 +78,6 @@ function PaladinBuffer:OnInitialize()
 	self.partyUnits = partyUnits
 	self.groupRoster = groupRoster
 	self.freeAssign = freeAssign
-	
 	
 	-- Save a list of unitids
 	for i=1, MAX_RAID_MEMBERS do
@@ -103,11 +107,7 @@ end
 function PaladinBuffer:ClearAssignments(caster)
 	if( self.db.profile.assignments[caster] ) then
 		for assignment in pairs(self.db.profile.assignments[caster]) do
-			if( classList[assignment] ) then
-				self.db.profile.assignments[caster][assignment] = "none"
-			else
-				self.db.profile.assignments[caster][assignment] = nil
-			end
+			self.db.profile.assignments[caster][assignment] = nil
 		end
 		
 		self:SendMessage("PB_CLEARED_ASSIGNMENTS", caster)
@@ -120,10 +120,6 @@ local function setupPlayerData(caster)
 	local fire
 	if( not self.db.profile.assignments[caster] ) then
 		self.db.profile.assignments[caster] = {}
-
-		for classToken in pairs(classList) do
-			self.db.profile.assignments[caster][classToken] = "none"
-		end
 
 		fire = true
 	end
@@ -142,11 +138,11 @@ function PaladinBuffer:AssignBlessing(caster, spellToken, assignment)
 	setupPlayerData(caster)
 	
 	-- Check if the blessing was already assigned, if so cancel it for the other person
-	if( spellToken ~= "none" and not classList[assignment] ) then
+	if( spellToken and not classList[assignment] ) then
 		for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
 			if( name ~= caster and assignments[assignment] == spellToken ) then
-				assignments[assignment] = "none"
-				self:SendMessage("PB_ASSIGNED_BLESSINGS", name, assignment, "none")
+				assignments[assignment] = nil
+				self:SendMessage("PB_ASSIGNED_BLESSINGS", name, assignment)
 			end
 		end
 	end
@@ -178,11 +174,7 @@ end
 function PaladinBuffer:ClearAllAssignments()
 	for name, data in pairs(self.db.profile.assignments) do
 		for target, val in pairs(data) do
-			if( classList[target] ) then
-				data[target] = "none"
-			else
-				data[target] = nil
-			end
+			data[target] = nil
 		end
 		
 		self:SendMessage("PB_CLEARED_ASSIGNMENTS")
@@ -202,10 +194,6 @@ function PaladinBuffer:ResetAllAssignments()
 		if( name ~= playerName ) then
 			self.db.profile.assignments[name] = nil
 			self.db.profile.blessings[name] = nil
-		else
-			for target in pairs(assignments) do
-				assignments[target] = nil
-			end
 		end
 	end
 
@@ -346,6 +334,21 @@ end
 function PaladinBuffer:PLAYER_REGEN_ENABLED()
 	self:UpdateKeyBindings()
 	self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+end
+
+-- Reset any set attributes on the smart functions
+function PaladinBuffer:PLAYER_REGEN_DISABLED()
+	if( self.smartGreaterButton ) then
+		self.smartGreaterButton:SetAttribute("type", nil)
+		self.smartGreaterButton:SetAttribute("unit", nil)
+		self.smartGreaterButton:SetAttribute("spell", nil)
+	end
+
+	if( self.smartSingleButton ) then
+		self.smartSingleButton:SetAttribute("type", nil)
+		self.smartSingleButton:SetAttribute("unit", nil)
+		self.smartSingleButton:SetAttribute("spell", nil)
+	end
 end
 
 -- Update key bindings for the auto buffing

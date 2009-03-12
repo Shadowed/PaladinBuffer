@@ -25,6 +25,14 @@ PaladinBufferLocals = {
 	-- Configuration
 	["General"] = "General",
 	
+	["Border color"] = "Border color",
+	["Background color"] = "Background color",
+	["Can rebuff color"] = "Can rebuff color",
+	["Background color for the buff frame when you need to rebuff (Blessings below the set time) AND all players are within range."] = "Background color for the buff frame when you need to rebuff (Blessings below the set time) AND all players are within range.",
+	
+	["Cannot rebuff color"] = "Cannot rebuff color",
+	["Background color when you need to rebuff (Blessings below the set time) BUT there are players out of range."] = "Background color when you need to rebuff (Blessings below the set time) BUT there are players out of range.",
+	
 	["Enable Pally Power support"] = "Enable Pally Power support",
 	["Allows you to both send and receive assignments from Pally Power users."] = "Allows you to both send and receive assignments from Pally Power users.",
 	
@@ -64,8 +72,8 @@ PaladinBufferLocals = {
 	["Columns"] = "Columns",
 	["How many columns to show, 1 for example will show a single straight line."] = "How many columns to show, 1 for example will show a single straight line.",
 	
-	["Enable buff frame"] = "Enable buff frame",
-	["Enables showing the smart buff frame while in a group."] = "Enables showing the smart buff frame while in a group.",
+	["Enable overall frame"] = "Enable overall frame",
+	["Shows the lowest greater and single blessings for all classes, also lets you smart buff all classes through them."] = "Shows the lowest greater and single blessings for all classes, also lets you smart buff all classes through them.",
 	
 	["Enable class status on buff frame"] = "Enable class status on buff frame",
 	["Shows each classes buff status and lets you manually buff them with the required blessings."] = "Shows each classes buff status and lets you manually buff them with the required blessings.",

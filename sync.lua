@@ -59,12 +59,10 @@ function Sync:SendAssignments()
 	for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
 		local text
 		for target, spellToken in pairs(assignments) do
-			if( spellToken ~= "none" ) then
-				if( text ) then	
-					text = string.format("%s:%s,%s", text, target, spellToken)
-				else
-					text = string.format("%s,%s", target, spellToken)
-				end
+			if( text ) then	
+				text = string.format("%s:%s,%s", text, target, spellToken)
+			else
+				text = string.format("%s,%s", target, spellToken)
 			end
 		end
 		
@@ -100,24 +98,20 @@ function Sync:SendPersonalAssignment()
 	-- Compile the list of what we have trained/talented
 	local talentList
 	for spellToken, rank in pairs(PaladinBuffer.db.profile.blessings[playerName]) do
-		if( rank ~= "none" ) then
-			if( talentList ) then
-				talentList = string.format("%s:%s,%s", talentList, spellToken, rank)
-			else
-				talentList = string.format("%s,%s", spellToken, rank)
-			end
+		if( talentList ) then
+			talentList = string.format("%s:%s,%s", talentList, spellToken, rank)
+		else
+			talentList = string.format("%s,%s", spellToken, rank)
 		end
 	end
 	
 	-- Compile a list of our assignments (If any)
 	local assignList
 	for assignment, spellToken in pairs(PaladinBuffer.db.profile.assignments[playerName]) do
-		if( spellToken ~= "none" ) then
-			if( assignList ) then
-				assignList = string.format("%s:%s,%s", assignList, assignment, spellToken)
-			else
-				assignList = string.format("%s,%s", assignment, spellToken)
-			end
+		if( assignList ) then
+			assignList = string.format("%s:%s,%s", assignList, assignment, spellToken)
+		else
+			assignList = string.format("%s,%s", assignment, spellToken)
 		end
 	end
 	
@@ -146,12 +140,13 @@ function Sync:ParseAssignments(sender, ...)
 	for i=1, select("#", ...) do
 		local assignment, spell = string.split(",", (select(i, ...)))
 		if( assignment and spell ) then
-			if( spell == "none" and not classList[assignment] ) then
+			-- Nones are just nils now
+			if( spell == "none" ) then
 				spell = nil
 			end
 			
 			-- Validate it, don't let a player get assigned a greater blessing and don't let a class be assigned a single blessing
-			if( not spell or spell == "none" or ( classList[assignment] and PaladinBuffer.blessingTypes[spell] == "greater" ) or ( not classList[assignment] and PaladinBuffer.blessingTypes[spell] == "single" ) ) then
+			if( not spell or ( classList[assignment] and PaladinBuffer.blessingTypes[spell] == "greater" ) or ( not classList[assignment] and PaladinBuffer.blessingTypes[spell] == "single" ) ) then
 				PaladinBuffer:AssignBlessing(sender, spell, assignment)
 			end
 		end
@@ -278,8 +273,8 @@ Order of the spell data is Wisdom, Might,  Kings, Sanc
 ]]
 
 -- Pally Power -> Paladin Buffer conversions
-local singleConversions = {[1] = "wisdom", [2] = "might", [3] = "kings", [4] = "sanct", ["wisdom"] = 1, ["might"] = 2, ["kings"] = 3, ["sanct"] = 4, ["none"] = "n", ["n"] = "none"}
-local greaterConversions = {[1] = "gwisdom", [2] = "gmight", [3] = "gkings", [4] = "gsanct", ["gwisdom"] = 1, ["gmight"] = 2, ["gkings"] = 3, ["gsanct"] = 4, [0] = "none", ["none"] = "n", ["n"] = "none"}
+local singleConversions = {[1] = "wisdom", [2] = "might", [3] = "kings", [4] = "sanct", ["wisdom"] = 1, ["might"] = 2, ["kings"] = 3, ["sanct"] = 4}
+local greaterConversions = {[1] = "gwisdom", [2] = "gmight", [3] = "gkings", [4] = "gsanct", ["gwisdom"] = 1, ["gmight"] = 2, ["gkings"] = 3, ["gsanct"] = 4}
 local classConversions = {[1] = "WARRIOR", [2] = "ROGUE", [3] = "PRIEST", [4] = "DRUID", [5] = "PALADIN", [6] = "HUNTER", [7] = "MAGE", [8] = "WARLOCK", [9] = "SHAMAN", [10] = "DEATHKNIGHT", ["WARRIOR"] = 1, ["ROGUE"] = 2, ["PRIEST"] = 3, ["DRUID"] = 4, ["PALADIN"] = 5, ["HUNTER"] = 6, ["MAGE"] = 7, ["WARLOCK"] = 8, ["SHAMAN"] = 9, ["DEATHKNIGHT"] = 10}
 local singleMaxRanks = {["might"] = 10, ["wisdom"] = 9, ["kings"] = 1, ["sanct"] = 1}
 local TOTAL_CLASSES = 11
@@ -303,17 +298,20 @@ local function sendPP()
 		end
 		
 		-- They are assigned to it, so we can do a mass to save bandwidth
-		if( spellAssigned and spellAssigned ~= "none" and spellAssigned ~= "spam" ) then
+		if( spellAssigned and spellAssigned ~= "spam" ) then
 			Sync:SendAddonMessage(string.format("MASSIGN %s %s", name, greaterConversions[spellAssigned]), "PLPWR")
 		-- Nope, :( send it as singles
 		else
 			-- Send that we don't have pets assigned
 			Sync:SendAddonMessage(string.format("ASSIGN %s 11 0", name), "PLPWR")
 			
-			for target, spellToken in pairs(assignments) do
-				if( classList[target] ) then
-					Sync:SendAddonMessage(string.format("ASSIGN %s %d %s", name, classConversions[target], tonumber(greaterConversions[spellToken]) or 0), "PLPWR")
+			for classToken in pairs(PaladinBuffer.classList) do
+				local spellID = 0
+				if( assignments[classToken] ) then
+					spellID = greaterConversions[assignments[classToken]]
 				end
+				
+				Sync:SendAddonMessage(string.format("ASSIGN %s %d %s", name, classConversions[classToken], spellID), "PLPWR")
 			end
 		end
 	end

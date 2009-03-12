@@ -39,7 +39,7 @@ function Assign:UpdateClassAssignments()
 	for _, column in pairs(self.columns) do
 		local text
 		for _, assignments in pairs(PaladinBuffer.db.profile.assignments) do
-			if( assignments[column.classToken] ~= "none" ) then
+			if( assignments[column.classToken] ) then
 				if( text ) then
 					text = text .. "," .. L[assignments[column.classToken]]
 				else
@@ -63,7 +63,7 @@ local function assignBlessing(self)
 	-- Check if we should toggle the assignment off
 	local spellToken = self.spellToken
 	if( PaladinBuffer.db.profile.assignments[self.playerName] and PaladinBuffer.db.profile.assignments[self.playerName][self.classToken] == self.spellToken ) then
-		spellToken = "none"
+		spellToken = nil
 	end
 			
 	if( IsShiftKeyDown() ) then
@@ -458,7 +458,7 @@ function Assign:UpdateSingle()
 			
 			if( groupData.class ~= "HEADER" ) then
 				for _, blessing in pairs(row.blessings) do
-					if( singleBlacklist[groupData.class] ~= blessing.spellToken and not PaladinBuffer.modules.Assign:IsGreaterAssigned(groupData.class, blessing.spellToken) and PaladinBuffer.modules.Assign:IsBlessingAvailable(groupData.id, blessing.spellToken) ) then
+					if( singleBlacklist[groupData.class] ~= blessing.spellToken and --[[not PaladinBuffer.modules.Assign:IsGreaterAssigned(groupData.class, blessing.spellToken) and]] PaladinBuffer.modules.Assign:IsBlessingAvailable(groupData.id, blessing.spellToken) ) then
 						SetDesaturation(blessing:GetNormalTexture(), nil)
 						
 						blessing:EnableMouse(true)

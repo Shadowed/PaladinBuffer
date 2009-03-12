@@ -4,19 +4,16 @@ local Buff = PaladinBuffer:NewModule("BuffGUI", "AceEvent-3.0")
 local L = PaladinBufferLocals
 local blessings = {[GetSpellInfo(56520)] = "might", [GetSpellInfo(48934)] = "gmight", [GetSpellInfo(56521)] = "wisdom", [GetSpellInfo(48938)] = "gwisdom", [GetSpellInfo(20911)] = "sanct", [GetSpellInfo(25899)] = "gsanct", [GetSpellInfo(20217)] = "kings", [GetSpellInfo(25898)] = "gkings"}
 local blessingIcons = {["gmight"] = select(3, GetSpellInfo(48934)), ["gwisdom"] = select(3, GetSpellInfo(48938)), ["gsanct"] = select(3, GetSpellInfo(25899)),["gkings"] = select(3, GetSpellInfo(25898)), ["might"] = select(3, GetSpellInfo(56520)), ["wisdom"] = select(3, GetSpellInfo(56521)), ["sanct"] = select(3, GetSpellInfo(20911)), ["kings"] = select(3, GetSpellInfo(20217))}
-local auraUpdates, singleTimes, greaterTimes, singleTypes, greaterTypes = {}, {}, {}, {}, {}
+local classFrames, singleTimes, greaterTimes, singleTypes, greaterTypes = {}, {}, {}, {}, {}
 local playerName = UnitName("player")
 local inCombat
-
-local GREATER_DURATION = 1800
-local SINGLE_DURATION = 600
 
 function Buff:Enable()
 	if( PaladinBuffer.disabled ) then
 		return
 	end
 	
-	assignments = PaladinBuffer.db.profile.assignments[UnitName("player")]
+	assignments = PaladinBuffer.db.profile.assignments[playerName]
 	groupRoster = PaladinBuffer.groupRoster
 	inCombat = InCombatLockdown()
 
@@ -43,33 +40,45 @@ function Buff:Disable()
 		end
 	end
 	
-	if( self.frame ) then
-		self.frame:Hide()
+	if( self.parent ) then
+		self.parent:Hide()
 	end
 end
 
 function Buff:UpdateFrame()
-	if( self.frame and self.frame:IsVisible() ) then
-		self:ScanGroup()
-		self:UpdateAssignmentIcons()
-		self:UpdateAuraTimes()
+	if( not self.frame or not self.parent:IsVisible() ) then
+		return
+	end
+	
+	self:ScanGroup()
+	self:UpdateAuraTimes()
+	
+	if( self.frame:IsVisible() ) then
 		self:UpdateColorStatus(self.frame, self.frame.filter)
-		
-		for _, frame in pairs(self.frame.classes) do
-			self:UpdateColorStatus(frame, frame.filter)
-		end
+	end
+
+	for _, frame in pairs(classFrames) do
+		self:UpdateColorStatus(frame, frame.filter)
 	end
 end
 
 function Buff:PLAYER_REGEN_DISABLED()
 	inCombat = true
-		
+	
 	if( self.frame ) then
+		-- Fade out the icon to show we're in combat
 		self.frame.icon:SetAlpha(0.50)
-		
-		if( PaladinBuffer.db.profile.frame.hideInCombat ) then
-			self.frame:Hide()
-		end
+		-- Stop any buffing in combat regardless
+		self.frame:SetAttribute("type", nil)
+	end
+
+	for _, frame in pairs(classFrames) do
+		frame:SetAttribute("type", nil)
+	end
+
+	-- Supposed to keep this hidden in combat
+	if( self.parent and PaladinBuffer.db.profile.frame.hideInCombat ) then
+		self.parent:Hide()
 	end
 end
 
@@ -84,7 +93,7 @@ function Buff:PLAYER_REGEN_ENABLED()
 	end
 
 	if( self.frame ) then
-		self.frame.icon:SetAlpha(0.50)
+		self.frame.icon:SetAlpha(1.0)
 		self.frame:Show()
 	end
 end
@@ -149,19 +158,11 @@ function Buff:UpdateColorStatus(frame, filter)
 	end
 		
 	if( not needRecast ) then
-		frame:SetBackdropColor(0, 0, 0, 1.0)
-	elseif( needRecast == "greater" ) then
-		if( hasGreaterCast and hasGreaterOOR ) then
-			frame:SetBackdropColor(0.80, 0.80, 0.10, 1.0)
-		else
-			frame:SetBackdropColor(0.70, 0.10, 0.10, 1.0)
-		end
-	elseif( needRecast == "single" ) then
-		if( hasSingleOOR ) then
-			frame:SetBackdropColor(0.80, 0.80, 0.10, 1.0)
-		else
-			frame:SetBackdropColor(0.70, 0.10, 0.10, 1.0)
-		end
+		frame:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r, PaladinBuffer.db.profile.frame.background.g, PaladinBuffer.db.profile.frame.background.b, 1.0)
+	elseif( ( needRecast == "greater" and hasGreaterCast and hasGreaterOOR ) or ( needRecast == "single" and hasSingleOOR ) ) then
+		frame:SetBackdropColor(PaladinBuffer.db.profile.frame.cantRebuff.r, PaladinBuffer.db.profile.frame.cantRebuff.g, PaladinBuffer.db.profile.frame.cantRebuff.b, 1.0)
+	else
+		frame:SetBackdropColor(PaladinBuffer.db.profile.frame.needRebuff.r, PaladinBuffer.db.profile.frame.needRebuff.g, PaladinBuffer.db.profile.frame.needRebuff.b, 1.0)
 	end
 end
 
@@ -175,14 +176,9 @@ function Buff:FindLowestTime(classFilter, blessingName)
 	
 	for name, unit in pairs(groupRoster) do
 		local classToken = select(2, UnitClass(unit))
-		if( classToken == classFilter and ( PaladinBuffer.db.profile.offline or UnitIsConnected(unit) ) ) then
+		if( classToken == classFilter and ( PaladinBuffer.db.profile.offline or UnitIsConnected(unit) ) and not assignments[name] ) then
 			classTotal = classTotal + 1
-						
-			-- Are they online?
-			--if( UnitIsConnected(unit) ) then
-			--	totalOnline = totalOnline + 1
-			--end
-			
+									
 			-- Blessings are done using visible range, so if they are within 100 yards, we can bless them
 			if( UnitIsVisible(unit) ) then
 				visibleRange = visibleRange + 1
@@ -248,7 +244,7 @@ end
 function Buff:AutoBuffLowestGreater(filter)
 	local castSpellOn, castSpell, lowestTime
 	for assignment, spellToken in pairs(assignments) do
-		if( spellToken ~= "none" and PaladinBuffer.classList[assignment] and ( filter == "ALL" or filter == assignment ) ) then
+		if( spellToken and PaladinBuffer.classList[assignment] and ( filter == "ALL" or filter == assignment ) ) then
 			local status, spellTarget, timeLeft = self:FindLowestTime(assignment, PaladinBuffer.blessings[spellToken])
 			if( status == "cast" ) then
 				if( not lowestTime or lowestTime > timeLeft ) then
@@ -305,6 +301,10 @@ function Buff:AutoBuffLowestSingle(filter)
 				end
 			end
 		end
+	end
+	
+	if( lowestTime ) then
+		lowestTime = lowestTime - GetTime()
 	end
 	
 	-- Everyone has the buff, so check if the lowest is below the threshold
@@ -382,21 +382,17 @@ local function updateTimer(self)
 	local time = GetTime()
 		
 	-- Find the lowest single blessing timer (if any)
-	if( self.singleIcon ) then
-		local lowestTime
-		for name, endTime in pairs(singleTimes) do
-			if( ( not lowestTime or lowestTime > endTime ) and UnitExists(name) ) then
-				if( singleTypes[name] == assignments[name] and ( self.filter == "ALL" or self.filter == select(2, UnitClass(name)) ) ) then
-					lowestTime = endTime
-				end
+	local lowestTime
+	for name, endTime in pairs(singleTimes) do
+		if( ( not lowestTime or lowestTime > endTime ) and UnitExists(name) ) then
+			if( singleTypes[name] == assignments[name] and ( self.filter == "ALL" or self.filter == select(2, UnitClass(name)) ) ) then
+				lowestTime = endTime
 			end
 		end
+	end
 
-		if( lowestTime and lowestTime >= time ) then
-			Buff:FormatTime(self.singleText, self.singleIcon, lowestTime - time)
-		else
-			self.singleText:SetFormattedText("|T%s:19:19:0:0|t %s", self.singleIcon, "---")
-		end
+	if( lowestTime and lowestTime >= time ) then
+		Buff:FormatTime(self.singleText, lowestTime - time)
 	else
 		self.singleText:SetText("")
 	end
@@ -413,20 +409,24 @@ local function updateTimer(self)
 	end
 		
 	if( lowestTime and lowestTime >= time ) then
-		Buff:FormatTime(self.greaterText, self.greaterIcon, lowestTime - time)
-	elseif( self.filter ~= "ALL" and assignments[self.filter] == "none" ) then
-		self.greaterText:SetFormattedText("|T%s:19:19:0:0|t %s", self.greaterIcon, L["None"])
+		Buff:FormatTime(self.greaterText, lowestTime - time)
+	elseif( self.filter ~= "ALL" and not assignments[self.filter] ) then
+		self.greaterText:SetText(L["None"])
 	else
-		self.greaterText:SetFormattedText("|T%s:19:19:0:0|t %s", self.greaterIcon, "---")
+		self.greaterText:SetText("---")
 	end
 end
 
 -- Update all frame aura timers
 function Buff:UpdateAuraTimes()
- 	for frame in pairs(auraUpdates) do
+ 	for _, frame in pairs(classFrames) do
 		if( frame:IsVisible() ) then
 			updateTimer(frame)
 		end
+	end
+	
+	if( self.frame and self.frame:IsVisible() ) then
+		updateTimer(self.frame)
 	end
 end
 
@@ -447,14 +447,42 @@ local function OnUpdate(self, elapsed)
 	end
 end
 
+-- Figure out who to buff
+local function PreClick(self, mouse)
+	if( inCombat ) then
+		return
+	end
+
+	if( mouse == "LeftButton" ) then
+		local type, unit, spell = Buff:AutoBuffLowestGreater(self.filter)
+		self:SetAttribute("type1", type)
+		self:SetAttribute("unit1", unit)
+		self:SetAttribute("spell1", spell)
+
+	elseif( mouse == "RightButton" ) then
+		local type, unit, spell = Buff:AutoBuffLowestSingle(self.filter)
+		self:SetAttribute("type2", type)
+		self:SetAttribute("unit2", unit)
+		self:SetAttribute("spell2", spell)
+	end
+end
+
 function Buff:CreateSingleFrame(parent)
-	local frame = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate")
+	self.backdrop = self.backdrop or {bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = "Interface\\ChatFrame\\ChatFrameBackground",
+		tile = false,
+		edgeSize = 0.8,
+		tileSize = 5,
+		insets = {left = 0, right = 0, top = 0, bottom = 0}
+	}
+
+	local frame = CreateFrame("Button", nil, parent or UIParent, "SecureActionButtonTemplate")
 	frame:SetFrameStrata("MEDIUM")
 	frame:SetHeight(32)
-	frame:SetWidth(85)
+	frame:SetWidth(65)
 	frame:SetBackdrop(self.backdrop)
-	frame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
-	frame:SetBackdropBorderColor(0.75, 0.75, 0.75, 0.90)
+	frame:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r, PaladinBuffer.db.profile.frame.background.g, PaladinBuffer.db.profile.frame.background.b, 1.0)
+	frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
 	frame:SetScript("OnShow", updateTimer)
 	frame:SetScript("OnUpdate", OnUpdate)
 	frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 450, -100)
@@ -463,117 +491,116 @@ function Buff:CreateSingleFrame(parent)
 	frame.rangedElapsed = 0
 	frame:Hide()
 	
-	frame:SetScript("PreClick", function(self, mouse)
-		if( inCombat ) then
-			return
-		end
-		
-		if( mouse == "LeftButton" ) then
-			local type, unit, spell = Buff:AutoBuffLowestGreater(self.filter)
-			self:SetAttribute("type1", type)
-			self:SetAttribute("unit1", unit)
-			self:SetAttribute("spell1", spell)
-		
-		elseif( mouse == "RightButton" ) then
-			local type, unit, spell = Buff:AutoBuffLowestSingle(self.filter)
-			self:SetAttribute("type2", type)
-			self:SetAttribute("unit2", unit)
-			self:SetAttribute("spell2", spell)
-		end
-	end)
+	frame:SetScript("PreClick", PreClick)
 	
-	--frame.title = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	--frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
-
 	frame.icon = frame:CreateTexture(nil, "ARTWORK")
 	frame.icon:SetHeight(24)
 	frame.icon:SetWidth(24)
 	frame.icon:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -4)
 
 	frame.greaterText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	frame.greaterText:SetFont((GameFontHighlightSmall:GetFont()), 11)
+	frame.greaterText:SetFont((GameFontHighlightSmall:GetFont()), 12)
 	frame.greaterText:SetPoint("TOPLEFT", frame.icon, "TOPRIGHT", 2, 1)
 
 	frame.singleText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	frame.singleText:SetFont((GameFontHighlightSmall:GetFont()), 11)
+	frame.singleText:SetFont((GameFontHighlightSmall:GetFont()), 12)
 	frame.singleText:SetPoint("TOPLEFT", frame.greaterText, "BOTTOMLEFT", 0, -2)
-
-	frame.greaterIcon = ""
-	frame.singleIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion"
-	
-	auraUpdates[frame] = true
 	
 	return frame
+end
+
+-- Functions for the parent frame
+local function positionParent(self)
+	self:ClearAllPoints()
+	
+	if( PaladinBuffer.db.profile.frame.position ) then
+		local scale = self:GetEffectiveScale()
+		self:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", PaladinBuffer.db.profile.frame.position.x / scale, PaladinBuffer.db.profile.frame.position.y / scale)
+	else
+		self:SetPoint("CENTER", UIParent, "CENTER")
+	end
+end
+
+local function OnShow(self)
+	updateTimer(self)
+	positionParent(self)
+end
+
+local function OnMouseDown(self)
+	if( not self.isMoving and IsAltKeyDown() and not PaladinBuffer.db.profile.frame.locked ) then
+		self.isMoving = true
+		self:StartMoving()
+	end
+end
+
+local function OnMouseUp(self)
+	if( self.isMoving ) then
+		local scale = self:GetEffectiveScale()
+
+		self.isMoving = nil
+		self:StopMovingOrSizing()
+
+		PaladinBuffer.db.profile.frame.position = {x = self:GetLeft() * scale, y = self:GetTop() * scale}
+	end
+end
+
+function Buff:SetParentFrame(frame)
+	frame:SetScript("OnShow", OnShow)
+	frame:SetScript("OnMouseDown", OnMouseDown)
+	frame:SetScript("OnMouseUp", OnMouseUp)
+	frame:SetScale(PaladinBuffer.db.profile.frame.scale)
+	frame:SetParent(UIParent)
+	frame:SetMovable(true)
+	
+	positionParent(frame)
+	
+	-- Set everything to this as a parent
+	for _, class in pairs(classFrames) do
+		if( class.filter ~= frame.filter ) then
+			class:SetScale(1.0)
+			class:SetParent(frame)
+		end
+	end
+	
+	self.parent = frame
+end
+
+function Buff:ResetParentFrame(frame)
+	frame:SetScript("OnShow", updateTimer)
+	frame:SetScript("OnMouseDown", nil)
+	frame:SetScript("OnMouseUp", nil)
+	frame:SetMovable(false)
+	frame:SetParent(self.frame)
 end
 
 function Buff:CreateFrame()
 	if( self.frame ) then
 		return
 	end
-	
-	self.backdrop = {bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-		edgeFile = "Interface\\ChatFrame\\ChatFrameBackground",
-		tile = false,
-		edgeSize = 0.8,
-		tileSize = 5,
-		insets = {left = 0, right = 0, top = 0, bottom = 0}
-	}
-
-	-- Functions for the main container frame
-	local OnShow = function(self)
-		updateTimer(self)
 		
-		if( PaladinBuffer.db.profile.frame.position ) then
-			local scale = self:GetEffectiveScale()
-			self:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", PaladinBuffer.db.profile.frame.position.x / scale, PaladinBuffer.db.profile.frame.position.y / scale)
-		else
-			self:SetPoint("CENTER", UIParent, "CENTER")
-		end
-	end
-	
-	local OnMouseDown = function(self)
-		if( not self.isMoving and IsAltKeyDown() and not PaladinBuffer.db.profile.frame.locked ) then
-			self.isMoving = true
-			self:StartMoving()
-		end
-	end
-	
-	local OnMouseUp = function(self)
-		if( self.isMoving ) then
-			local scale = self:GetEffectiveScale()
-
-			self.isMoving = nil
-			self:StopMovingOrSizing()
-
-			PaladinBuffer.db.profile.frame.position = {x = self:GetLeft() * scale, y = self:GetTop() * scale}
-		end
-	end
-	
 	-- Create it all!
-	self.frame = self:CreateSingleFrame(UIParent)
-	self.frame.singleIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion"
-	self.frame.greaterIcon = "Interface\\Icons\\Spell_Holy_ProclaimChampion_02"
+	self.frame = self:CreateSingleFrame()
 	self.frame.filter = "ALL"
 	self.frame.icon:SetTexture("Interface\\Icons\\Spell_Holy_Aspiration")
-	self.frame:SetScale(PaladinBuffer.db.profile.frame.scale)
-	self.frame.classes = {}
-	self.frame:SetScript("OnShow", OnShow)
-	self.frame:SetScript("OnMouseDown", OnMouseDown)
-	self.frame:SetScript("OnMouseUp", OnMouseUp)
-	self.frame:SetMovable(true)
 	self.frame:Show()
+	
+	-- This frame is supposed to be shown, so it can be the parent
+	if( PaladinBuffer.db.profile.frame.enabled ) then
+		self:SetParentFrame(self.frame)
+	end
 end
 
 -- Create the necessary class frames if we have to
 function Buff:UpdateClassFrames()
-	-- All frame things are disabled
-	if( not PaladinBuffer.db.profile.frame.enabled or ( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) ) then
-		if( self.frame ) then
-			self.frame:Hide()
+	-- Not grouped, don't show it
+	if( ( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) or ( not PaladinBuffer.db.profile.frame.enabled and not PaladinBuffer.db.profile.frame.classes ) ) then
+		if( self.parent ) then
+			self.parent:Hide()
 		end
 		return
 	end
-	
+
+	-- In combat, update when we leave
 	if( inCombat ) then
 		updateQueued = true
 		return
@@ -581,7 +608,12 @@ function Buff:UpdateClassFrames()
 	
 	-- Create our main anchor
 	self:CreateFrame()
-	self.frame:Show()
+
+	if( PaladinBuffer.db.profile.frame.enabled ) then
+		self.frame:Show()
+	else
+		self.frame:Hide()
+	end
 	
 	-- Class frames are disabled
 	if( not PaladinBuffer.db.profile.frame.classes ) then
@@ -589,33 +621,35 @@ function Buff:UpdateClassFrames()
 	end	
 	
 	-- Flag it as we haven't updated
-	for _, frame in pairs(self.frame.classes) do frame.wasUpdated = nil end
+	for _, frame in pairs(classFrames) do frame.wasUpdated = nil end
 	
 	-- Now scan the group and create/update any frames if needed
 	for _, unit in pairs(groupRoster) do
 		local class, classToken = UnitClass(unit)
 		if( class and classToken ) then
-			local frame = self.frame.classes[classToken]
+			local frame = classFrames[classToken]
 			if( not frame ) then
-				frame = self:CreateSingleFrame(self.frame)
+				frame = self:CreateSingleFrame(self.parent)
 				frame.filter = classToken
 				
 				local coords = CLASS_BUTTONS[classToken]
 				frame.icon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
 				frame.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
 				
-				self.frame.classes[classToken] = frame
+				classFrames[classToken] = frame
+			end
+			
+			-- No parent was set yet, because it's supposed to only show the class frames, soo set the first frame as the parent
+			if( not self.parent ) then
+				self:SetParentFrame(frame)
 			end
 
 			frame.wasUpdated = true
 		end
 	end
 	
-	-- Update assignment icons for the timer things
-	self:UpdateAssignmentIcons()
-
 	-- The frame wasn't updated this go around, so we can hide it as the class is gone
-	for _, frame in pairs(self.frame.classes) do
+	for _, frame in pairs(classFrames) do
 		if( not frame.wasUpdated ) then
 			frame:Hide()
 		else
@@ -629,10 +663,10 @@ end
 
 function Buff:PositionClassFrames()
 	local id, inColumn = 1, 1
-	local columnStart, previousRow = self.frame, self.frame
+	local columnStart, previousRow = self.parent, self.parent
 
-	for classToken, frame in pairs(self.frame.classes) do
-		if( frame:IsVisible() ) then
+	for classToken, frame in pairs(classFrames) do
+		if( frame:IsVisible() and frame.filter ~= self.parent.filter ) then
 			if( inColumn == PaladinBuffer.db.profile.frame.columns ) then
 				frame:ClearAllPoints()
 				
@@ -661,39 +695,42 @@ function Buff:PositionClassFrames()
 	end
 	
 	-- Reposition the main frame as well
-	self.frame:ClearAllPoints()
-
-	if( PaladinBuffer.db.profile.frame.position ) then
-		local scale = self.frame:GetEffectiveScale()
-		self.frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", PaladinBuffer.db.profile.frame.position.x / scale, PaladinBuffer.db.profile.frame.position.y / scale)
-	else
-		self.frame:SetPoint("CENTER", UIParent, "CENTER")
-	end
+	positionParent(self.parent)
 	
 end
 
 function Buff:Reload()
-	if( self.frame ) then
-		self.frame:SetScale(PaladinBuffer.db.profile.frame.scale)
+	if( self.parent ) then
+		-- Current parent is not the overall frame but it should be
+		if( self.parent.filter ~= "ALL" and PaladinBuffer.db.profile.frame.enabled ) then
+			self:ResetParentFrame(self.parent)
+			self:SetParentFrame(self.frame)
+		-- Current parent is the overall frame, but it shouldn't be
+		elseif( self.parent.filter == "ALL" and not PaladinBuffer.db.profile.frame.enabled ) then
+			self.parent = nil
+			self.frame:Hide()
+			
+			self:UpdateClassFrames()
+		end
+		
+		-- Update parent scaling annd reposition
+		if( self.parent ) then
+			self.parent:SetScale(PaladinBuffer.db.profile.frame.scale)
+		end
+		
+		-- Update colors
+		self.frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
+		
+		for _, frame in pairs(classFrames) do
+			frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
+		end
+		
 		self:PositionClassFrames()
 	end
 end
 
--- Update the display icon for assignments
-function Buff:UpdateAssignmentIcons()
-	-- Now set the greater blessing icon + a single one if needed
-	for assignment, spellToken in pairs(assignments) do
-		if( PaladinBuffer.classList[assignment] ) then
-			local frame = self.frame.classes[assignment]
-			if( frame ) then
-				frame.greaterIcon = blessingIcons[spellToken] or self.frame.greaterIcon
-			end
-		end
-	end
-end
-
 -- Format seconds into 50s/30m/etc
-function Buff:FormatTime(text, icon, timeLeft)
+function Buff:FormatTime(text, timeLeft)
 	local hours, minutes, seconds = 0, 0, 0
 	if( timeLeft >= 3600 ) then
 		hours = floor(timeLeft / 3600)
@@ -706,10 +743,10 @@ function Buff:FormatTime(text, icon, timeLeft)
 	end
 
 	if( hours > 0 ) then
-		text:SetFormattedText("|T%s:20:20:0:0|t %dh", icon, hours)
+		text:SetFormattedText("%dh", hours)
 	elseif( minutes > 0 ) then
-		text:SetFormattedText("|T%s:20:20:0:0|t %dm", icon, minutes)
+		text:SetFormattedText("%dm", minutes)
 	else
-		text:SetFormattedText("|T%s:20:20:0:0|t %02ds", icon, timeLeft > 0 and timeLeft or 0)
+		text:SetFormattedText("%02ds", timeLeft > 0 and timeLeft or 0)
 	end
 end
