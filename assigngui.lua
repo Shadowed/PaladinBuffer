@@ -600,6 +600,10 @@ function Assign:UpdatePermissions()
 end
 
 local function OnShow(self)
+	if( not PaladinBuffer.foundSpells ) then
+		PaladinBuffer:ScanSpells()
+	end
+
 	Assign:UpdatePlayerRows()
 	Assign:UpdateAssignments()
 	

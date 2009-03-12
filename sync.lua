@@ -93,6 +93,10 @@ function Sync:SendPersonalAssignment()
 		return
 	end
 	
+	if( not PaladinBuffer.foundSpells ) then
+		PaladinBuffer:ScanSpells()
+	end
+	
 	-- Compile the list of what we have trained/talented
 	local talentList
 	for spellToken, rank in pairs(PaladinBuffer.db.profile.blessings[playerName]) do

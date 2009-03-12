@@ -24,8 +24,8 @@ function PaladinBuffer:OnInitialize()
 			singleThreshold = 5,
 			greaterThreshold = 15,
 			offline = false,
-			blessings = {},
-			assignments = {},
+			blessings = {[playerName] = {}},
+			assignments = {[playerName] = {}},
 			inside = {["raid"] = true, ["party"] = true, ["none"] = true},
 			frame = {
 				enabled = true,
@@ -55,25 +55,12 @@ function PaladinBuffer:OnInitialize()
 	self:RegisterEvent("RAID_ROSTER_UPDATE", "ScanGroup")
 	self:RegisterEvent("PARTY_MEMBERS_CHANGED", "ScanGroup")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
-	self:RegisterEvent("LEARNED_SPELL_IN_TAB", "ScanSpells")
+	self:RegisterEvent("SPELLS_CHANGED", "ScanSpells")
 	self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 		
-	-- Defaults
-	local setup
-	if( not self.disabled and not self.db.profile.assignments[playerName] ) then
-		self.db.profile.assignments[playerName] = {}
-		self.db.profile.blessings[playerName] = {}
-		setup = true
-	end
-	
 	-- Load class list
 	for classToken in pairs(RAID_CLASS_COLORS) do
 		classList[classToken] = true
-
-		-- Player should ALWAYS have a default assignment set
-		if( setup ) then
-			self.db.profile.assignments[playerName][classToken] = "none"
-		end
 	end
 	
 	-- So modules can access this data
@@ -217,11 +204,7 @@ function PaladinBuffer:ResetAllAssignments()
 			self.db.profile.blessings[name] = nil
 		else
 			for target in pairs(assignments) do
-				if( classList[target] ) then
-					assignments[target] = "none"
-				else
-					assignments[target] = nil
-				end
+				assignments[target] = nil
 			end
 		end
 	end
@@ -246,6 +229,7 @@ function PaladinBuffer:ScanSpells()
 		if( rank ) then
 			rank = rank == "" and 1 or tonumber(string.match(rank, L["Rank ([0-9]+)"]))
 			self.db.profile.blessings[playerName][spellToken] = rank
+			self.foundSpells = true
 		else
 			self.db.profile.blessings[playerName][spellToken] = nil
 		end
