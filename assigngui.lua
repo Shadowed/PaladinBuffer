@@ -138,10 +138,16 @@ function Assign:UpdateAssignmentButtons(rowID)
 			columns[rowID]:Show()
 			
 			for _, icon in pairs(columns[rowID].icons) do
-				if( ( row.playerName == playerName or PaladinBuffer.freeAssign[row.playerName] or PaladinBuffer:HasPermission(playerName) ) and blessingData[icon.spellToken] and blacklisted[icon.classToken] ~= icon.spellToken ) then
+				if( blessingData[icon.spellToken] and blacklisted[icon.classToken] ~= icon.spellToken ) then
 					SetDesaturation(icon:GetNormalTexture(), nil)
-
-					icon:EnableMouse(true)
+					
+					-- Show their assignments, but don't allow them to be changed
+					if( row.playerName == playerName or PaladinBuffer.freeAssign[row.playerName] or PaladinBuffer:HasPermission(playerName) ) then
+						icon:EnableMouse(true)
+					else
+						icon:EnableMouse(false)
+					end
+					
 					icon:SetAlpha(assignData[icon.classToken] ~= icon.spellToken and 0.40 or 1.0)
 					icon.playerName = row.playerName
 					icon.disabled = nil

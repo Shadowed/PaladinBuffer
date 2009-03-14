@@ -125,14 +125,16 @@ function Buff:UpdateColorStatus(frame, filter)
 			-- Nope, a greater!
 			elseif( greaterBlessing ) then
 				-- Check if we have someone we can cast this initially on
-				if( not hasGreaterCast and IsSpellInRange(greaterBlessing, unit) == 1 ) then
+				if( IsSpellInRange(greaterBlessing, unit) == 1 ) then
 					hasGreaterCast = true
+				else
+					hasGreaterOOR = true
 				end
 
 				-- Someone isn't visible, so out of range ( :( )
-				if( not UnitIsVisible(unit) ) then
-					hasGreaterOOR = true
-				end
+				--if( not UnitIsVisible(unit) ) then
+				--	hasGreaterOOR = true
+				--end
 
 				-- Find the lowest buff time + does someone have a buff missing
 				local buffTime = greaterTimes[name]
@@ -180,12 +182,13 @@ function Buff:FindLowestTime(classFilter, blessingName)
 			classTotal = classTotal + 1
 									
 			-- Blessings are done using visible range, so if they are within 100 yards, we can bless them
-			if( UnitIsVisible(unit) ) then
-				visibleRange = visibleRange + 1
-			end
+			--if( UnitIsVisible(unit) and not UnitIsDeadOrGhost(unit) ) then
+			--	visibleRange = visibleRange + 1
+			--end
 			
 			-- However! We need an initial target, so we have to make sure at least one person is within range of us
-			if( IsSpellInRange(blessingName, unit) == 1 ) then
+			if( IsSpellInRange(blessingName, unit) == 1 and not UnitIsDeadOrGhost(unit) ) then
+				visibleRange = visibleRange + 1
 				inSpellRange = unit
 			end
 		

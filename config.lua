@@ -254,36 +254,42 @@ local function loadOptions()
 	options.args.profile.order = 3
 end
 
+function Config:ToggleAssignmentUI()
+	local Assign = PaladinBuffer.modules.AssignGUI
+	Assign:CreateFrame()
+
+	if( Assign.frame:IsVisible() ) then
+		Assign.frame:Hide()	
+	else
+		Assign.frame:Show()
+	end
+end
+
+function Config:OpenConfig()
+	if( not registered ) then
+		if( not options ) then
+			loadOptions()
+		end
+
+		config:RegisterOptionsTable("PaladinBuffer", options)
+		dialog:SetDefaultSize("PaladinBuffer", 650, 525)
+		registered = true
+	end
+
+	dialog:Open("PaladinBuffer")
+end
 
 -- Slash commands
 SLASH_PALADINBUFF1 = "/paladinbuff"
-SLASH_PALADINBUFF2 = "/PaladinBuffer"
+SLASH_PALADINBUFF2 = "/paladinbuffer"
 SLASH_PALADINBUFF3 = "/pb"
 SlashCmdList["PALADINBUFF"] = function(msg)
 	msg = string.lower(msg or "")
 	
 	if( msg == "assign" ) then
-		local Assign = PaladinBuffer.modules.AssignGUI
-		Assign:CreateFrame()
-		
-		if( Assign.frame:IsVisible() ) then
-			Assign.frame:Hide()	
-		else
-			Assign.frame:Show()
-		end
-		
+		Config:ToggleAssignmentUI()
 	elseif( msg == "config" ) then
-		if( not registered ) then
-			if( not options ) then
-				loadOptions()
-			end
-
-			config:RegisterOptionsTable("PaladinBuffer", options)
-			dialog:SetDefaultSize("PaladinBuffer", 650, 525)
-			registered = true
-		end
-
-		dialog:Open("PaladinBuffer")
+		Config:OpenConfig()
 	else
 		PaladinBuffer:Print(L["Slash commands"])
 		PaladinBuffer:Echo(L["/pb config - Shows the configuration."])
