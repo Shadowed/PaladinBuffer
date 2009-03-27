@@ -85,6 +85,19 @@ PaladinBufferLocals = {
 
 	["Hide in combat"] = "Hide in combat",
 	["Hides the entire buff frame while you are in combat."] = "Hides the entire buff frame while you are in combat.",
+	
+	-- Class map
+	["PET"] = "Pet",
+	["DRUID"] = "Druid",
+	["DEATHKNIGHT"] = "Death Knight",
+	["WARRIOR"] = "Warrior",
+	["PALADIN"] = "Paladin",
+	["ROGUE"] = "Rogue",
+	["MAGE"] = "Mage",
+	["PRIEST"] = "Priest",
+	["WARLOCK"] = "Warlock",
+	["HUNTER"] = "Hunter",
+	["SHAMAN"] = "Shaman",	
 
 	-- GUI
 	["None"] = "None",
@@ -93,18 +106,4 @@ PaladinBufferLocals = {
 	["Single assignments"] = "Single assignments",
 	["Clear"] = "Clear",
 	["Refresh"] = "Refresh",
-		
-	["CLASSES"] = {
-		["PET"] = "Pets (%d)",
-		["DRUID"] = "Druids (%d)",
-		["DEATHKNIGHT"] = "Death Knights (%d)",
-		["WARRIOR"] = "Warriors (%d)",
-		["PALADIN"] = "Paladins (%d)",
-		["ROGUE"] = "Rogues (%d)",
-		["MAGE"] = "Mages (%d)",
-		["PRIEST"] = "Priests (%d)",
-		["WARLOCK"] = "Warlocks (%d)",
-		["HUNTER"] = "Hunters (%d)",
-		["SHAMAN"] = "Shamans (%d)",	
-	},
 }

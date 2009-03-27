@@ -596,7 +596,7 @@ end
 -- Create the necessary class frames if we have to
 function Buff:UpdateClassFrames()
 	-- Not grouped, don't show it
-	if( ( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) or ( not PaladinBuffer.db.profile.frame.enabled and not PaladinBuffer.db.profile.frame.classes ) ) then
+	if( ( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 and PaladinBuffer.db.profile.frame.locked ) or ( not PaladinBuffer.db.profile.frame.enabled and not PaladinBuffer.db.profile.frame.classes ) ) then
 		if( self.parent ) then
 			self.parent:Hide()
 		end

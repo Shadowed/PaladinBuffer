@@ -6,7 +6,7 @@ local supportsPP, requestThrottle = {}, {}
 local playerName = UnitName("player")
 local THROTTLE_TIME = 5
 
-function Sync:Enable()
+function Sync:OnEnable()
 	self:RegisterEvent("CHAT_MSG_ADDON")
 	self.RegisterComm(self, "PALB")
 
@@ -14,7 +14,7 @@ function Sync:Enable()
 	freeAssign = PaladinBuffer.freeAssign
 end
 
-function Sync:Disable()
+function Sync:OnDisable()
 	self:UnregisterEvent("CHAT_MSG_ADDON")
 	self:UnregisterAllComm()
 end
@@ -283,11 +283,14 @@ local TOTAL_CLASSES = 11
 -- Timer to make  sure we know the data was cleared first
 local function sendPP()
 	for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
+		local classesFound = 0
 		local spellAssigned
 		for target, spellToken in pairs(assignments) do
 			-- Check if we can send this as a mass assignment to save bandwidth
 			if( not spellAssigned and classList[target] ) then
 				spellAssigned = spellToken
+				classesFound = classesFound + 1
+				
 			-- This is a class assignment, but it's using a different token so we have to do single greater assignments
 			elseif( classList[target] and spellToken ~= spellAssigned ) then
 				spellAssigned = "spam"
@@ -298,7 +301,7 @@ local function sendPP()
 		end
 		
 		-- They are assigned to it, so we can do a mass to save bandwidth
-		if( spellAssigned and spellAssigned ~= "spam" ) then
+		if( spellAssigned and spellAssigned ~= "spam" and classesFound == 10 ) then
 			Sync:SendAddonMessage(string.format("MASSIGN %s %s", name, greaterConversions[spellAssigned]), "PLPWR")
 		-- Nope, :( send it as singles
 		else

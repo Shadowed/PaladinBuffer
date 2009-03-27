@@ -302,8 +302,8 @@ function PaladinBuffer:PLAYER_ENTERING_WORLD()
 		self:ScanGroup()
 	end
 	
-	self:ScanSpells()
 	self:ZONE_CHANGED_NEW_AREA()
+	self:ScanSpells()
 	self:UpdateKeyBindings()
 end
 

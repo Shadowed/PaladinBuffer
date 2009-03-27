@@ -4,7 +4,7 @@ local Assign = PaladinBuffer:NewModule("AssignGUI", "AceEvent-3.0")
 local L = PaladinBufferLocals
 
 local playerName = UnitName("player")
-local groupList, displayList, classTotals
+local groupList, displayList, classTotals, singleBlessings, blessingIcons, blessings, blessingOrder, singleBlacklist, blacklisted, classes
 local MAX_GROUP_ROWS = 14
 local ROW_HEIGHT = 17
 
@@ -186,6 +186,11 @@ end
 -- Create an icon listing of what blessings they have + talents
 function Assign:UpdateBlessingInfo(rowID)
 	local row = self.rows[rowID]
+	
+	-- Hide all blessings first
+	for _, button in pairs(row.blessings) do
+		button:Hide()
+	end
 		
 	local bID = 0
 	for spellToken, rank in pairs(PaladinBuffer.db.profile.blessings[row.playerName]) do
@@ -196,7 +201,7 @@ function Assign:UpdateBlessingInfo(rowID)
 			local rank, improved = string.split(".", rank)
 			improved = tonumber(improved) or 0
 			rank = tonumber(rank)
-
+			
 			-- Improved text
 			local button = row.blessings[bID]
 			if( not button ) then
@@ -228,22 +233,22 @@ function Assign:UpdateBlessingInfo(rowID)
 	table.sort(row.blessings, sortBlessings)
 
 	-- Now position blessings
-	if( row.blessings[2] ) then
+	if( row.blessings[2] and row.blessings[2]:IsVisible() ) then
 		row.blessings[2]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 60, -6)
 		row.blessings[2]:Show()
 	end
 	
-	if( row.blessings[1] ) then
+	if( row.blessings[1] and row.blessings[1]:IsVisible()) then
 		row.blessings[1]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -6)
 		row.blessings[1]:Show()
 	end
 
-	if( row.blessings[4] ) then
+	if( row.blessings[4] and row.blessings[4]:IsVisible()) then
 		row.blessings[4]:SetPoint("TOPLEFT", row.blessings[2], "BOTTOMLEFT", 0, -2)
 		row.blessings[4]:Show()
 	end
 	
-	if( row.blessings[3] ) then
+	if( row.blessings[3] and row.blessings[3]:IsVisible()) then
 		row.blessings[3]:SetPoint("TOPLEFT", row.blessings[1], "BOTTOMLEFT", 0, -2)
 		row.blessings[3]:Show()
 	end
@@ -331,265 +336,6 @@ function Assign:UpdatePlayerRows()
 	end
 end
 
--- Load various info into the table
-function Assign:LoadUnit(unit)
-	if( not UnitExists(unit) or ( unit ~= "player" and UnitIsUnit(unit, "player") ) ) then
-		return
-	end
-	
-	local row
-	-- Find a table we can use if none exists
-	for _, groupRow in pairs(groupList) do
-		if( not groupRow.enabled ) then
-			row = groupRow
-			break
-		end
-	end
-	
-	if( not row ) then
-		table.insert(groupList, {})
-		row = groupList[#(groupList)]
-	end
-	
-	row.class = select(2, UnitClass(unit))
-	if( UnitCreatureFamily(unit) ) then
-		row.class = UnitCreatureFamily(unit)
-	elseif( not PaladinBuffer.classList[row.class] ) then
-		row.class = nil
-		return
-	end
-	
-	row.text = UnitName(unit)
-	row.id = row.class == "PET" and string.format("PET.%s", row.text) or row.text
-	row.enabled = true
-	
-	classTotals[row.class] = (classTotals[row.class] or 0) + 1
-end
-
-function Assign:LoadClass(classToken)
-	local row
-	-- Recycle a table if we can
-	for _, groupRow in pairs(groupList) do
-		if( not groupRow.enabled ) then
-			row = groupRow
-			break
-		end
-	end
-	
-	if( not row ) then
-		table.insert(groupList, {})
-		row = groupList[#(groupList)]
-	end
-	
-	row.text = string.format(L["CLASSES"][classToken], classTotals[classToken])
-	row.class = "HEADER"
-	row.id = nil
-	row.enabled = true
-	
-	table.insert(displayList, #(groupList))
-	
-	for id, row in pairs(groupList) do
-		if( row.class == classToken and row.enabled ) then
-			table.insert(displayList, id)
-		end
-	end
-end
-
-local function sortGroup(a, b)
-	return a.text > b.text
-end
-
-function Assign:UpdateGroupList()
-	for _, row in pairs(groupList) do row.enabled = nil row.class = nil row.text = "" end
-	for i=#(displayList), 1, -1 do table.remove(displayList, i) end
-	for k in pairs(classTotals) do classTotals[k] = nil end
-	
-	-- Load player
-	self:LoadUnit("player")
-	
-	-- Load raid
-	for i=1, GetNumRaidMembers() do
-		self:LoadUnit(PaladinBuffer.raidUnits[i])
-
-		if( not UnitControllingVehicle(PaladinBuffer.raidUnits[i]) ) then
-			self:LoadUnit(PaladinBuffer.raidUnits[i] .. "pet")
-		end
-	end
-	
-	-- Load party if not in a raid
-	if( GetNumRaidMembers() == 0 ) then
-		for i=1, GetNumPartyMembers() do
-			self:LoadUnit(PaladinBuffer.partyUnits[i])
-	
-			if( not UnitControllingVehicle(PaladinBuffer.partyUnits[i]) ) then
-				self:LoadUnit(PaladinBuffer.partyUnits[i] .. "pet")
-			end
-		end
-	end
-	
-	table.sort(groupList, sortGroup)
-	
-	-- Now create the class headers
-	for _, classToken in pairs(classes) do
-		local total = classTotals[classToken]
-		if( total ) then
-			self:LoadClass(classToken)
-		end
-	end
-	
-	if( classTotals["PET"] ) then
-		self:LoadClass("PET")
-	end
-end
-
--- Update listing
-function Assign:UpdateSingle()
-	local self = Assign
-	
-	for _, row in pairs(self.singleFrame.rows) do
-		for _, blessing in pairs(row.blessings) do blessing:Hide() end
-		row:Hide()
-	end
-
-	FauxScrollFrame_Update(self.singleFrame.scroll, #(displayList), MAX_GROUP_ROWS - 1, ROW_HEIGHT)
-	
-	local offset = FauxScrollFrame_GetOffset(self.singleFrame.scroll)
-	local displayed = 0
-	
-	for index, dataID in pairs(displayList) do
-		if( index >= offset and displayed < MAX_GROUP_ROWS ) then
-			displayed = displayed + 1
-			local row = self.singleFrame.rows[displayed]
-			local groupData = groupList[dataID]
-			
-			if( groupData.class ~= "HEADER" ) then
-				for _, blessing in pairs(row.blessings) do
-					if( singleBlacklist[groupData.class] ~= blessing.spellToken and --[[not PaladinBuffer.modules.Assign:IsGreaterAssigned(groupData.class, blessing.spellToken) and]] PaladinBuffer.modules.Assign:IsBlessingAvailable(groupData.id, blessing.spellToken) ) then
-						SetDesaturation(blessing:GetNormalTexture(), nil)
-						
-						blessing:EnableMouse(true)
-						blessing:SetAlpha(0.40)
-						blessing.playerName = groupData.id
-						
-						for _, data in pairs(PaladinBuffer.db.profile.assignments) do
-							if( data[groupData.id] == blessing.spellToken ) then
-								blessing:SetAlpha(1.0)
-								break
-							end
-						end
-					else
-						SetDesaturation(blessing:GetNormalTexture(), true)
-						
-						blessing:EnableMouse(false)
-						blessing:SetAlpha(0.10)
-					end
-					
-					blessing:Show()
-				end
-				
-				if( RAID_CLASS_COLORS[groupData.class] ) then
-					row.text:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[groupData.class].r, 255 * RAID_CLASS_COLORS[groupData.class].g, 255 * RAID_CLASS_COLORS[groupData.class].b, groupData.text)
-				else
-					row.text:SetText(groupData.text)
-				end
-			else
-				row.text:SetText(groupData.text)
-			end
-			
-			row:Show()
-		end
-	end
-end
-
--- Assign a single blessing to the player
-local function assignSingleBlessing(self)
-	-- Find who is the best for this
-	local caster = PaladinBuffer.modules.Assign:FindSingleBlesser(self.spellToken)
-	-- This should *never* happen, if the blessing is unavailable the button should be grayed out
-	if( not caster ) then
-		return
-	end
-	
-	if( PaladinBuffer.db.profile.assignments[caster][self.playerName] == self.spellToken ) then
-		PaladinBuffer:AssignBlessing(caster, nil, self.playerName)
-		return
-	end
-	
-	PaladinBuffer:AssignBlessing(caster, self.spellToken, self.playerName)
-end
-
--- Create the single assignment UI
-function Assign:CreateSingleFrame()
-	if( self.singleFrame ) then
-		return
-	end
-	
-	groupList = {}
-	displayList = {}
-	classTotals = {}
-	
-	-- Create the container frame
-	self.singleFrame = CreateFrame("Frame", nil, self.frame)
-	self.singleFrame:SetFrameStrata("HIGH")
-	self.singleFrame:SetHeight(300)
-	self.singleFrame:SetWidth(245)
-	self.singleFrame:SetBackdrop(self.backdrop)
-	self.singleFrame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
-	self.singleFrame:SetBackdropBorderColor(0.90, 0.90, 0.90, 0.95)
-	self.singleFrame:SetPoint("TOPLEFT", self.frame.push, "TOPRIGHT", 3, 10)
-	self.singleFrame:SetScript("OnShow", function()
-		Assign:RegisterMessage("PB_ROSTER_UPDATED", "UpdateGroupList")
-		Assign:UpdateGroupList()
-		Assign:UpdateSingle()
-	end)
-	self.singleFrame:SetScript("OnHide", function()
-		Assign:UnregisterMessage("PB_ROSTER_UPDATED")
-	end)
-	self.singleFrame:Hide()
-
-	self.singleFrame.scroll = CreateFrame("ScrollFrame", "PaladinBufferSingleFrame", self.singleFrame, "FauxScrollFrameTemplate")
-	self.singleFrame.scroll:SetPoint("TOPLEFT", self.singleFrame, "TOPLEFT", 0, -4)
-	self.singleFrame.scroll:SetPoint("BOTTOMRIGHT", self.singleFrame, "BOTTOMRIGHT", -26, 3)
-	self.singleFrame.scroll:SetScript("OnVerticalScroll", function(self, value) FauxScrollFrame_OnVerticalScroll(self, value, ROW_HEIGHT, Assign.UpdateSingle) end)
-
-	self.singleFrame.rows = {}
-	
-	for i=1, MAX_GROUP_ROWS do
-		local row = CreateFrame("Frame", nil, self.singleFrame)
-		row:SetWidth(140)
-		row:SetHeight(ROW_HEIGHT)
-		row.blessings = {}
-		
-		row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-		row.text:SetPoint("TOPLEFT", row, "TOPLEFT")
-		
-		if( i > 1 ) then
-			row:SetPoint("TOPLEFT", self.singleFrame.rows[i - 1], "BOTTOMLEFT", 0, -4)
-		else
-			row:SetPoint("TOPLEFT", self.singleFrame, "TOPLEFT", 4, -8)
-		end
-		
-		for bID, spellToken in pairs(singleBlessings) do
-			local button = CreateFrame("Button", nil, row)
-			button:SetNormalTexture(blessingIcons[spellToken])
-			button:SetHeight(16)
-			button:SetWidth(16)
-			button:SetScript("OnClick", assignSingleBlessing)
-			button.spellToken = spellToken
-			
-			if( bID > 1 ) then
-				button:SetPoint("TOPLEFT", row.blessings[bID - 1], "TOPRIGHT", 2, 0)
-			else
-				button:SetPoint("TOPLEFT", row, "TOPRIGHT", 0, 1)
-			end
-		
-			row.blessings[bID] = button
-		end
-
-		self.singleFrame.rows[i] = row
-	end
-end
-
 -- Frame shown, so we want to be updating the UI
 local function assignmentUpdate(...)
 	Assign:UpdatePlayerRows()
@@ -597,6 +343,18 @@ local function assignmentUpdate(...)
 
 	if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
 		Assign:UpdateSingle()
+	end
+	
+	if( Assign.choiceFrame and Assign.choiceFrame:IsVisible() ) then
+		Assign:UpdateChoiceList()
+	end
+end
+
+local function rosterUpdate(...)
+	Assign:UpdatePermissions()
+	
+	if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
+		Assign:UpdateGroupList()
 	end
 end
 
@@ -620,8 +378,8 @@ local function OnShow(self)
 	Assign:RegisterMessage("PB_RESET_ASSIGNMENTS", assignmentUpdate)
 
 	-- What blessings they were assigned changed
-	Assign:RegisterMessage("PB_CLEARED_ASSIGNMENTS", "UpdateAssignments")
-	Assign:RegisterMessage("PB_ASSIGNED_BLESSINGS", "UpdateAssignments")
+	Assign:RegisterMessage("PB_CLEARED_ASSIGNMENTS", assignmentUpdate)
+	Assign:RegisterMessage("PB_ASSIGNED_BLESSINGS", assignmentUpdate)
 	
 	-- Roster/permissions changed, need to update permissions
 	Assign:RegisterMessage("PB_PERMISSIONS_UPDATED", "UpdatePermissions")
@@ -647,7 +405,7 @@ local function OnHide(self)
 	Assign:UnregisterAllMessages()
 	
 	if( Assign.singleFrame ) then
-		Assign.singleFrame:Hide()
+		Assign.choiceFrame:Hide()
 	end
 end
 
@@ -692,9 +450,9 @@ local function singleAssignBlessings()
 	Assign:CreateSingleFrame()
 	
 	if( Assign.singleFrame:IsVisible() ) then
-		Assign.singleFrame:Hide()
+		Assign.choiceFrame:Hide()
 	else
-		Assign.singleFrame:Show()
+		Assign.choiceFrame:Show()
 	end
 end
 
@@ -890,6 +648,379 @@ function Assign:CreateFrame()
 
 	self.assignColumns = {}
 	self.rows = {}
+end
+
+-- SINGLE ASSIGNMENT UI
+-- Load various info into the table
+function Assign:LoadUnit(unit)
+	-- Make sure the unit doesn't exist, also don't double load the player
+	if( not UnitExists(unit) or UnitControllingVehicle(unit) or ( unit ~= "player" and UnitIsUnit(unit, "player") ) ) then
+		return
+	-- Load the units pet
+	elseif( UnitIsPlayer(unit) ) then
+		self:LoadUnit(unit .. "pet")
+	end
+	
+	local row
+	-- Find a table we can use if none exists
+	for _, groupRow in pairs(groupList) do
+		if( not groupRow.enabled ) then
+			row = groupRow
+			break
+		end
+	end
+	
+	if( not row ) then
+		table.insert(groupList, {})
+		row = groupList[#(groupList)]
+	end
+	
+	row.class = select(2, UnitClass(unit))
+	if( UnitCreatureFamily(unit) ) then
+		row.class = UnitCreatureFamily(unit)
+	elseif( not PaladinBuffer.classList[row.class] ) then
+		row.class = nil
+		return
+	end
+	
+	row.enabled = true
+	row.type = "PLAYER"
+	row.name = UnitName(unit)
+	row.id = row.class == "PET" and string.format("PET.%s", row.text) or row.text
+	
+	classTotals[row.class] = (classTotals[row.class] or 0) + 1
+end
+
+function Assign:LoadClass(classToken)
+	local row
+	
+	-- Recycle a table if we can
+	for _, groupRow in pairs(groupList) do
+		if( not groupRow.enabled ) then
+			row = groupRow
+			break
+		end
+	end
+	
+	if( not row ) then
+		table.insert(groupList, {})
+		row = groupList[#(groupList)]
+	end
+	
+	row.enabled = true
+	row.type = "HEADER"
+	row.name = L[classToken]
+	row.classTotal = classTotals[classToken]
+	row.class = classToken
+	
+	-- Add the class header
+	table.insert(displayList, #(groupList))
+	
+	-- Now add all of the players
+	for id, row in pairs(groupList) do
+		if( row.enabled and row.type == "PLAYER" and row.class == classToken ) then
+			table.insert(displayList, id)
+		end
+	end
+end
+
+local function sortGroup(a, b)
+	return a.name > b.name
+end
+
+function Assign:UpdateGroupList()
+	for _, row in pairs(groupList) do row.enabled = nil end
+	for i=#(displayList), 1, -1 do table.remove(displayList, i) end
+	for k in pairs(classTotals) do classTotals[k] = nil end
+	
+	-- Load player
+	self:LoadUnit("player")
+	
+	-- Load raid
+	for i=1, GetNumRaidMembers() do
+		self:LoadUnit(PaladinBuffer.raidUnits[i])
+	end
+	
+	-- Load party if not in a raid
+	if( GetNumRaidMembers() == 0 ) then
+		for i=1, GetNumPartyMembers() do
+			self:LoadUnit(PaladinBuffer.partyUnits[i])
+		end
+	end
+	
+	table.sort(groupList, sortGroup)
+	
+	-- Now create the class headers
+	for _, classToken in pairs(classes) do
+		local total = classTotals[classToken]
+		if( total ) then
+			self:LoadClass(classToken)
+		end
+	end
+	
+	if( classTotals["PET"] ) then
+		self:LoadClass("PET")
+	end
+end
+
+-- Selecting a Paladin to assign singles to
+local function sortByName(a, b)
+	return a.name < b.name
+end
+
+function Assign:UpdateChoiceList()
+	for _, row in pairs(self.choiceFrame.rows) do row.name = "ZZ"; row:Hide() end
+	
+	local id = 0
+	for name in pairs(PaladinBuffer.db.profile.blessings) do
+		id = id + 1
+		self.choiceFrame.rows[id].name = name
+		self.choiceFrame.rows[id]:Show()
+	end
+	
+	table.sort(self.choiceFrame.rows, sortByName)
+	for id, row in pairs(self.choiceFrame.rows) do
+		row:ClearAllPoints()
+		
+		if( row:IsVisible() ) then
+			-- Color name if it was selected
+			if( self.choiceFrame.selectedName == row.name ) then
+				row.text:SetTextColor(1.0, 0.81, 0.0)
+			else
+				row.text:SetTextColor(1.0, 1.0, 1.0)
+			end
+
+			-- Update blessing icons
+			for _, blessing in pairs(row.blessings) do
+				if( PaladinBuffer.modules.Assign:IsBlessingAvailable(blessing.spellToken, row.name) ) then
+					local total = PaladinBuffer.modules.Assign:TotalSingleAssigns(blessing.spellToken, row.name)
+					blessing.count:SetText(total > 0 and total or "")
+					blessing:Show()
+				else
+					blessing:Hide()
+				end
+			end
+
+			-- Position
+			if( id > 1 ) then
+				row:SetPoint("TOPLEFT", self.choiceFrame.rows[id - 1], "BOTTOMLEFT", 0, -4)
+			else
+				row:SetPoint("TOPLEFT", self.choiceFrame, "TOPLEFT", 4, -8)
+			end
+
+			row.text:SetText(row.name)
+		end
+	end
+end
+
+-- Update listing
+function Assign:UpdateSingle()
+	local self = Assign
+	
+	for _, row in pairs(self.singleFrame.rows) do
+		for _, blessing in pairs(row.blessings) do blessing:Hide() end
+		row:Hide()
+	end
+
+	FauxScrollFrame_Update(self.singleFrame.scroll, #(displayList), MAX_GROUP_ROWS - 1, ROW_HEIGHT)
+	
+	local offset = FauxScrollFrame_GetOffset(self.singleFrame.scroll)
+	local displayed = 0
+	
+	for index, dataID in pairs(displayList) do
+		if( index >= offset and displayed < MAX_GROUP_ROWS ) then
+			displayed = displayed + 1
+			local row = self.singleFrame.rows[displayed]
+			local groupData = groupList[dataID]
+			if( groupData.type == "PLAYER" ) then
+				-- Setup the single blessing icons
+				for _, blessing in pairs(row.blessings) do
+					if( singleBlacklist[groupData.class] ~= blessing.spellToken and PaladinBuffer.modules.Assign:IsBlessingAvailable(blessing.spellToken, self.choiceFrame.selectedName) ) then
+						SetDesaturation(blessing:GetNormalTexture(), nil)
+						
+						blessing:EnableMouse(true)
+						blessing:SetAlpha(0.40)
+						blessing.playerName = groupData.name
+						
+						if( self.choiceFrame.selectedName ) then
+							if( PaladinBuffer.db.profile.assignments[self.choiceFrame.selectedName][groupData.name] == blessing.spellToken ) then
+								blessing:SetAlpha(1.0)
+							end
+						else
+							for _, data in pairs(PaladinBuffer.db.profile.assignments) do
+								if( data[groupData.name] == blessing.spellToken ) then
+									blessing:SetAlpha(1.0)
+									break
+								end
+							end
+						end
+					else
+						SetDesaturation(blessing:GetNormalTexture(), true)
+						
+						blessing:EnableMouse(false)
+						blessing:SetAlpha(0.10)
+					end
+					
+					blessing:Show()
+				end
+				
+				row.text:SetText(groupData.name)
+				row:Show()
+				
+			elseif( groupData.type == "HEADER" ) then
+				if( RAID_CLASS_COLORS[groupData.class] ) then
+					row.text:SetFormattedText("|cff%02x%02x%02x%s|r (%d)", 255 * RAID_CLASS_COLORS[groupData.class].r, 255 * RAID_CLASS_COLORS[groupData.class].g, 255 * RAID_CLASS_COLORS[groupData.class].b, groupData.name, groupData.classTotal)
+				else
+					row.text:SetFormattedText("|cff%02x%02x%02x%s|r (%d)", 255 * 1.0, 255 * 0.81, 0, groupData.name, groupData.classTotal)
+				end
+				
+				row:Show()
+			end
+		end
+	end
+end
+
+-- Assign a single blessing to the player
+local function assignSingleBlessing(self)
+	-- Find who is the best for this
+	local caster = Assign.choiceFrame.selectedName or PaladinBuffer.modules.Assign:FindSingleBlesser(self.spellToken)
+	if( PaladinBuffer.db.profile.assignments[caster][self.playerName] == self.spellToken ) then
+		PaladinBuffer:AssignBlessing(caster, nil, self.playerName)
+		return
+	end
+	
+	PaladinBuffer:AssignBlessing(caster, self.spellToken, self.playerName)
+end
+
+-- Set a single player to assign this set of blessings
+local function setSingleAssigner(self)
+	if( MouseIsOver(self) ) then
+		if( Assign.choiceFrame.selectedName == self.name ) then
+			Assign.choiceFrame.selectedName = nil
+		else
+			Assign.choiceFrame.selectedName = self.name
+		end
+
+		Assign:UpdateChoiceList()
+	end
+end
+
+-- Create the single assignment UI
+function Assign:CreateSingleFrame()
+	if( self.singleFrame ) then
+		return
+	end
+	
+	groupList = {}
+	displayList = {}
+	classTotals = {}
+	
+	-- Choosing a Paladin to assign singles
+	self.choiceFrame = CreateFrame("Frame", nil, self.frame)
+	self.choiceFrame:SetFrameStrata("HIGH")
+	self.choiceFrame:SetHeight(300)
+	self.choiceFrame:SetWidth(170)
+	self.choiceFrame:SetBackdrop(self.backdrop)
+	self.choiceFrame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
+	self.choiceFrame:SetBackdropBorderColor(0.90, 0.90, 0.90, 0.95)
+	self.choiceFrame:SetPoint("TOPLEFT", self.frame.push, "TOPRIGHT", 3, 10)
+	self.choiceFrame:Hide()
+	self.choiceFrame:SetScript("OnShow", function()
+		Assign:UpdateChoiceList()	
+		Assign:UpdateGroupList()
+		Assign:UpdateSingle()
+	end)
+	
+	self.choiceFrame.rows = {}
+	
+	for i=1, 11 do
+		local row = CreateFrame("Frame", nil, self.choiceFrame)
+		row:SetWidth(165)
+		row:SetHeight(16)
+		row:SetScript("OnMouseUp", setSingleAssigner)
+		row:EnableMouse(true)
+		row:Hide()
+		
+		row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+		row.text:SetPoint("TOPLEFT", row, "TOPLEFT")
+		row.text:SetJustifyH("LEFT")
+		row.text:SetWidth(85)
+		row.text:SetHeight(16)
+
+		row.blessings = {}
+		for bID, spellToken in pairs(singleBlessings) do
+			local button = CreateFrame("Button", nil, row)
+			button:SetNormalTexture(blessingIcons[spellToken])
+			button:SetHeight(16)
+			button:SetWidth(16)
+			button.spellToken = spellToken
+
+			button.count = button:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+			button.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT")
+
+			if( bID > 1 ) then
+				button:SetPoint("TOPLEFT", row.blessings[bID - 1], "TOPRIGHT", 2, 0)
+			else
+				button:SetPoint("TOPLEFT", row, "TOPRIGHT", -75, 1)
+			end
+
+			row.blessings[bID] = button
+		end
+
+		self.choiceFrame.rows[i] = row
+	end
+
+	-- Assigning singles to players
+	self.singleFrame = CreateFrame("Frame", nil, self.choiceFrame)
+	self.singleFrame:SetFrameStrata("HIGH")
+	self.singleFrame:SetHeight(300)
+	self.singleFrame:SetWidth(245)
+	self.singleFrame:SetBackdrop(self.backdrop)
+	self.singleFrame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
+	self.singleFrame:SetBackdropBorderColor(0.90, 0.90, 0.90, 0.95)
+	self.singleFrame:SetPoint("TOPLEFT", self.choiceFrame, "TOPRIGHT", 3, 0)
+
+	self.singleFrame.scroll = CreateFrame("ScrollFrame", "PaladinBufferSingleFrame", self.singleFrame, "FauxScrollFrameTemplate")
+	self.singleFrame.scroll:SetPoint("TOPLEFT", self.singleFrame, "TOPLEFT", 0, -4)
+	self.singleFrame.scroll:SetPoint("BOTTOMRIGHT", self.singleFrame, "BOTTOMRIGHT", -26, 3)
+	self.singleFrame.scroll:SetScript("OnVerticalScroll", function(self, value) FauxScrollFrame_OnVerticalScroll(self, value, ROW_HEIGHT, Assign.UpdateSingle) end)
+
+	self.singleFrame.rows = {}
+	
+	for i=1, MAX_GROUP_ROWS do
+		local row = CreateFrame("Frame", nil, self.singleFrame)
+		row:SetWidth(140)
+		row:SetHeight(ROW_HEIGHT)
+		row.blessings = {}
+		
+		row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+		row.text:SetPoint("TOPLEFT", row, "TOPLEFT")
+		
+		if( i > 1 ) then
+			row:SetPoint("TOPLEFT", self.singleFrame.rows[i - 1], "BOTTOMLEFT", 0, -4)
+		else
+			row:SetPoint("TOPLEFT", self.singleFrame, "TOPLEFT", 4, -8)
+		end
+
+		for bID, spellToken in pairs(singleBlessings) do
+			local button = CreateFrame("Button", nil, row)
+			button:SetNormalTexture(blessingIcons[spellToken])
+			button:SetHeight(16)
+			button:SetWidth(16)
+			button:SetScript("OnClick", assignSingleBlessing)
+			button.spellToken = spellToken
+			
+			if( bID > 1 ) then
+				button:SetPoint("TOPLEFT", row.blessings[bID - 1], "TOPRIGHT", 2, 0)
+			else
+				button:SetPoint("TOPLEFT", row, "TOPRIGHT", 0, 1)
+			end
+		
+			row.blessings[bID] = button
+		end
+
+		self.singleFrame.rows[i] = row
+	end
 end
 
 function Assign:Reload()
