@@ -173,7 +173,11 @@ local function loadOptions()
 						type = "toggle",
 						name = L["Locked"],
 						desc = L["You can move the buff frame by ALT + dragging the smart buff frame window while the frame is unlocked."],
-						width = "full",
+					},
+					outOfGroup = {
+						order = 0.5,
+						type = "toggle",
+						name = L["Show buff frame while ungrouped"],
 					},
 					enabled = {
 						order = 1,

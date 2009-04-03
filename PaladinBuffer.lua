@@ -16,7 +16,7 @@ function PaladinBuffer:OnInitialize()
 	self.defaults = {
 		profile = {
 			ppSupport = true,
-			requireLeader = true,
+			requireLeader = false,
 			greaterbinding = "CTRL-1",
 			singleBinding = "CTRL-2",
 			scale = 1.0,
@@ -31,6 +31,7 @@ function PaladinBuffer:OnInitialize()
 				enabled = true,
 				classes = true,
 				hideInCombat = true,
+				outOfGroup = false,
 				locked = false,
 				growUp = false,
 				scale = 1.0,
@@ -241,7 +242,12 @@ function PaladinBuffer:ScanSpells()
 			end
 		end
 	end
-		
+	
+	-- Send updated blessing update
+	if( not self.isLoggingIn and ( GetNumRaidMembers() > 0 or GetNumPartyMembers() > 0 ) ) then
+		self.modules.Sync:SendBlessingData()
+	end
+	
 	self:SendMessage("PB_SPELLS_SCANNED")
 end
 
@@ -250,6 +256,10 @@ function PaladinBuffer:ScanGroup()
 	-- Reset data from previous scan
 	for k in pairs(groupRoster) do groupRoster[k] = nil end
 	for k in pairs(hasGroupRank) do hasGroupRank[k] = nil end
+
+	-- Player always has rank
+	groupRoster[playerName] = "player"
+	hasGroupRank[playerName] = true
 
 	-- Left raid :(
 	if( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) then
@@ -265,14 +275,13 @@ function PaladinBuffer:ScanGroup()
 			hasGroupRank[name] = true
 		end
 		
-		groupRoster[name] = raidUnits[i]
+		if( name ~= playerName ) then
+			groupRoster[name] = raidUnits[i]
+		end
 	end
 
 	-- Not in a raid, so scan party
 	if( GetNumRaidMembers() == 0 ) then
-		groupRoster[playerName] = "player"
-		hasGroupRank[playerName] = true
-		
 		for i=1, GetNumPartyMembers() do
 			local name = UnitName(partyUnits[i])
 			hasGroupRank[name] = true
@@ -300,11 +309,16 @@ function PaladinBuffer:PLAYER_ENTERING_WORLD()
 
 	if( GetNumRaidMembers() > 0 or GetNumPartyMembers() > 0 ) then
 		self:ScanGroup()
+	else
+		groupRoster[playerName] = "player"
+		hasGroupRank[playerName] = true
 	end
 	
+	self.isLoggingIn = true
 	self:ZONE_CHANGED_NEW_AREA()
 	self:ScanSpells()
 	self:UpdateKeyBindings()
+	self.isLoggingIn = false
 end
 
 function PaladinBuffer:ZONE_CHANGED_NEW_AREA()

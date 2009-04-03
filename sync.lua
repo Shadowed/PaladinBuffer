@@ -119,6 +119,30 @@ function Sync:SendPersonalAssignment()
 	self:SendAddonMessage(string.format("MYDATA: %s;%s;%s", (talentList or ""), (assignList or ""), PaladinBuffer.db.profile.requireLeader and "true" or "false"))
 end
 
+function Sync:SendBlessingData()
+	if( PaladinBuffer.disabled ) then
+		return
+	end
+	
+	
+	if( not PaladinBuffer.foundSpells ) then
+		PaladinBuffer:ScanSpells()
+	end
+	
+	-- Compile the list of what we have trained/talented
+	local talentList
+	for spellToken, rank in pairs(PaladinBuffer.db.profile.blessings[playerName]) do
+		if( talentList ) then
+			talentList = string.format("%s:%s,%s", talentList, spellToken, rank)
+		else
+			talentList = string.format("%s,%s", spellToken, rank)
+		end
+	end
+		
+	-- Send it off
+	self:SendAddonMessage(string.format("BLESSINGS: %s", talentList))
+end
+
 function Sync:SendLeaderRequirements()
 	self:SendAddonMessage(string.format("FREEASSIGN %s", PaladinBuffer.db.profile.requireLeader and "NO" or "YES"), "PLPWR")
 	self:SendAddonMessage(string.format("LEADER: %s", PaladinBuffer.db.profile.requireLeader and "true" or "false"))
@@ -177,7 +201,7 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	end
 	
 	-- Request our assignment data
-	if( cmd == "REQUEST" and PaladinBuffer:HasPermission(sender) ) then
+	if( cmd == "REQUEST" ) then
 		-- We already got a request from this person, and it's still throttled
 		if( requestThrottle[sender] and requestThrottle[sender] >= GetTime() ) then
 			return
@@ -191,6 +215,11 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 		
 		self:SendPersonalAssignment()
 	
+	-- Blessing data
+	elseif( cmd == "BLESSINGS" ) then
+		PaladinBuffer:ResetBlessingData(sender)
+		self:ParseTalents(sender, string.split(":", talents))
+			
 	-- Reset + Assign, this implies that any data not present is there because they aren't assigned it
 	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
 		self:ParsePlayerAssignments(true, string.split(";", arg))

@@ -86,6 +86,8 @@ PaladinBufferLocals = {
 	["Hide in combat"] = "Hide in combat",
 	["Hides the entire buff frame while you are in combat."] = "Hides the entire buff frame while you are in combat.",
 	
+	["Show buff frame while ungrouped"] = "Show buff frame while ungrouped",
+	
 	-- Class map
 	["PET"] = "Pet",
 	["DRUID"] = "Druid",

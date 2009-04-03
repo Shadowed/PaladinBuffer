@@ -371,6 +371,9 @@ local function OnShow(self)
 	Assign:UpdatePlayerRows()
 	Assign:UpdateAssignments()
 	
+	-- Talents changed, update assignment info
+	Assign:RegisterMessage("PB_SPELLS_SCANNED", assignmentUpdate)
+	
 	-- New player found, will need to update rows
 	Assign:RegisterMessage("PB_DISCOVERED_PLAYER", assignmentUpdate)
 
@@ -566,7 +569,7 @@ function Assign:CreateFrame()
 	resetAll:SetWidth(55)
 	resetAll:SetText(L["Clear"])
 	resetAll:SetScript("OnClick", clearAllBlessings)
-	resetAll:SetPoint("TOPLEFT", push, "BOTTOMLEFT", 0, -2)
+	resetAll:SetPoint("TOPLEFT", push, "BOTTOMLEFT", 0, -6)
 
 	self.frame.resetAll = resetAll
 
@@ -594,7 +597,7 @@ function Assign:CreateFrame()
 	
 	self.titleFrame.singleAssign = singleAssign
 
-	local quickAssign = CreateFrame("Button", nil, self.titleFrame, "UIPanelButtonGrayTemplate")
+	local quickAssign = CreateFrame("Button", nil, self.titleFrame, "GameMenuButtonTemplate")
 	quickAssign:SetFrameStrata("MEDIUM")
 	quickAssign:SetNormalFontObject(GameFontHighlightSmall)
 	quickAssign:SetHighlightFontObject(GameFontHighlightSmall)
@@ -602,7 +605,7 @@ function Assign:CreateFrame()
 	quickAssign:SetWidth(80)
 	quickAssign:SetText(L["Quick assign"])
 	quickAssign:SetScript("OnClick", quickAssignBlessings)
-	quickAssign:SetPoint("TOPLEFT", singleAssign, "TOPRIGHT", 4, 0)
+	quickAssign:SetPoint("TOPLEFT", singleAssign, "TOPRIGHT", 15, 0)
 	
 	self.titleFrame.quickAssign = quickAssign
 
@@ -661,21 +664,11 @@ function Assign:LoadUnit(unit)
 		self:LoadUnit(unit .. "pet")
 	end
 	
-	local row
-	-- Find a table we can use if none exists
-	for _, groupRow in pairs(groupList) do
-		if( not groupRow.enabled ) then
-			row = groupRow
-			break
-		end
-	end
+	table.insert(groupList, {})
 	
-	if( not row ) then
-		table.insert(groupList, {})
-		row = groupList[#(groupList)]
-	end
-	
+	local row = groupList[#(groupList)]
 	row.class = select(2, UnitClass(unit))
+	
 	if( UnitCreatureFamily(unit) ) then
 		row.class = UnitCreatureFamily(unit)
 	elseif( not PaladinBuffer.classList[row.class] ) then
@@ -692,21 +685,9 @@ function Assign:LoadUnit(unit)
 end
 
 function Assign:LoadClass(classToken)
-	local row
-	
-	-- Recycle a table if we can
-	for _, groupRow in pairs(groupList) do
-		if( not groupRow.enabled ) then
-			row = groupRow
-			break
-		end
-	end
-	
-	if( not row ) then
-		table.insert(groupList, {})
-		row = groupList[#(groupList)]
-	end
-	
+	table.insert(groupList, {})
+
+	local row = groupList[#(groupList)]
 	row.enabled = true
 	row.type = "HEADER"
 	row.name = L[classToken]
@@ -729,8 +710,8 @@ local function sortGroup(a, b)
 end
 
 function Assign:UpdateGroupList()
-	for _, row in pairs(groupList) do row.enabled = nil end
 	for i=#(displayList), 1, -1 do table.remove(displayList, i) end
+	for k in pairs(groupList) do groupList[k] = nil end
 	for k in pairs(classTotals) do classTotals[k] = nil end
 	
 	-- Load player

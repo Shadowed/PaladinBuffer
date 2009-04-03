@@ -15,6 +15,7 @@ libs\AceConfig-3.0\AceConfig-3.0.xml
 libs\AceComm-3.0\AceComm-3.0.xml
 
 localization.enUS.lua
+localization.deDE.lua
 
 PaladinBuffer.lua
 assignments.lua
