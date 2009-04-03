@@ -33,6 +33,7 @@ function PaladinBuffer:OnInitialize()
 				hideInCombat = true,
 				outOfGroup = false,
 				locked = false,
+				popout = true,
 				growUp = false,
 				scale = 1.0,
 				columns = 1,
@@ -92,6 +93,7 @@ function PaladinBuffer:OnInitialize()
 	-- Kings is still talented, so add the talent name as an improvement
 	if( select(4, GetBuildInfo()) <= 30000 ) then
 		improved[GetSpellInfo(59295)] = {"kings", "gkings"}
+		self.isStill30 = true
 	end
 end
 
@@ -260,7 +262,7 @@ function PaladinBuffer:ScanGroup()
 	-- Player always has rank
 	groupRoster[playerName] = "player"
 	hasGroupRank[playerName] = true
-
+	
 	-- Left raid :(
 	if( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) then
 		self:ResetAllAssignments()

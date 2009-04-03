@@ -72,12 +72,35 @@ function Buff:PLAYER_REGEN_DISABLED()
 	if( self.frame ) then
 		-- Fade out the icon to show we're in combat
 		self.frame.icon:SetAlpha(0.50)
+		
 		-- Stop any buffing in combat regardless
-		self.frame:SetAttribute("type", nil)
+		self.frame:SetAttribute("type1", nil)
+		self.frame:SetAttribute("type2", nil)
 	end
-
-	for _, frame in pairs(classFrames) do
-		frame:SetAttribute("type", nil)
+	
+	-- Find the a person of the class thats online (and in range if we can) that we can buff in combat
+	for classToken, frame in pairs(classFrames) do
+		local type, unit, spell = self:FindClosetToBuff(classToken)
+		if( not type ) then
+			frame.icon:SetAlpha(0.50)
+		else
+			frame.icon:SetAlpha(1.0)
+		end
+		
+		frame:SetAttribute("type1", type)
+		frame:SetAttribute("unit1", unit)
+		frame:SetAttribute("spell1", spell)
+		frame:SetAttribute("type2", nil)
+		
+		-- Setup attributes for the popouts
+		if( frame.popout and frame.popout[1] ) then
+			for _, pop in pairs(frame.popout) do
+				local type, unit, spell = PaladinBuffer.modules.BuffGUI:FindPlayerAssignment(pop.unit, UnitName(pop.unit), pop.classToken, true)
+				pop:SetAttribute("type", type)
+				pop:SetAttribute("unit", unit)
+				pop:SetAttribute("spell", spell)
+			end
+		end
 	end
 
 	-- Supposed to keep this hidden in combat
@@ -170,6 +193,103 @@ function Buff:UpdateColorStatus(frame, filter)
 	else
 		frame:SetBackdropColor(PaladinBuffer.db.profile.frame.needRebuff.r, PaladinBuffer.db.profile.frame.needRebuff.g, PaladinBuffer.db.profile.frame.needRebuff.b, 1.0)
 	end
+end
+
+function Buff:FindPlayerAssignment(unit, name, classToken, ignoreTime)
+	local assignedToken = assignments[name] or assignments[classToken]
+	if( not assignedToken ) then
+		return nil
+	end
+	
+	local assignedName = PaladinBuffer.blessings[assignedToken]
+	
+	-- We're entering combat, so just assign what we can and don't do any fancy checks
+	if( ignoreTime ) then
+		if( assignedName ) then
+			return "spell", unit, assignedName
+		end
+
+		return nil
+	end
+	
+	-- Find out how much time is left
+	local type = PaladinBuffer.blessingTypes[assignedToken]
+	local secondsLeft = 0
+	local buffID = 1
+	
+	while( true ) do
+		local buffName, rank, texture, count, debuffType, duration, endTime, isMine, isStealable = UnitAura(unit, buffID, "PLAYER")
+		if( not buffName ) then break end
+		buffID = buffID + 1
+		
+		if( buffName == assignedName ) then
+			secondsLeft = (endTime - GetTime()) / 60
+			break
+		end
+	end
+	
+	secondsLeft = secondsLeft / 60
+	
+	-- Need to recast
+	if( ( type == "greater" and secondsLeft < PaladinBuffer.db.profile.greaterThreshold ) or ( type == "single" and secondsLeft < PaladinBuffer.db.profile.singleThreshold ) ) then
+		return "spell", unit, assignedName
+	end
+	
+	
+	return nil
+end
+
+-- Figure out who we could buff for this class
+function Buff:FindClosetToBuff(classFilter)
+	-- Do we have an assignment for this glass?
+	local blessingToken = assignments[classFilter]
+	if( not blessingToken ) then
+		return nil
+	end
+
+	local blessingName = PaladinBuffer.blessings[blessingToken]
+	local closetInRange, closetOnline
+	for name, unit in pairs(groupRoster) do
+		local classToken = select(2, UnitClass(unit))
+		if( classToken == classFilter ) then
+			if( IsSpellInRange(blessingName, unit) == 1 and not UnitIsDeadOrGhost(unit) ) then
+				closetInRange = unit
+			end
+			
+			if( UnitIsConnected(unit) ) then
+				closetOnline = unit
+			end
+		end
+	end
+	
+	if( closetInRange or closetOnline ) then
+		return "spell", (closetInRange or closetOnline), blessingName
+	end
+	
+	return nil
+end
+
+-- Find time left on the buff assigned to theree class/player
+function Buff:GetBuffTimeLeft(unit, name, classToken)
+	local assignedToken = assignments[name] or assignments[classToken]
+	if( not assignedToken ) then
+		return nil
+	end
+	
+	local assignedName = PaladinBuffer.blessings[assignedToken]
+	
+	local buffID = 1
+	while( true ) do
+		local buffName, rank, texture, count, debuffType, duration, endTime, isMine, isStealable = UnitAura(unit, buffID, "PLAYER")
+		if( not buffName ) then break end
+		buffID = buffID + 1
+		
+		if( buffName == assignedName ) then
+			return endTime - GetTime(), PaladinBuffer.blessingTypes[assignedToken]
+		end
+	end
+	
+	return nil
 end
 
 -- Figure out who we're going to be casting this one
@@ -437,6 +557,172 @@ function Buff:UpdateAuraTimes()
 	end
 end
 
+-- Pop out bar
+local function updatePopoutDuration(self)
+	-- Set buff text
+	if( UnitIsDeadOrGhost(self.unit) ) then
+		self.duration:SetText(L["Dead"])
+	elseif( not UnitIsConnected(self.unit) ) then
+		self.duration:SetText(L["Offline"])
+	else
+		local seconds = Buff:GetBuffTimeLeft(self.unit, name, self.classToken)
+		if( seconds ) then
+			Buff:FormatTime(self.duration, seconds)
+		else
+			self.duration:SetText(L["None"])
+		end
+	end
+end
+
+local function popoutOnShow(self)
+	-- Owner name
+	local name = UnitName(self.unit)
+	self.name:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[self.classToken].r, 255 * RAID_CLASS_COLORS[self.classToken].g, 255 * RAID_CLASS_COLORS[self.classToken].b, name)
+	self.playerName = name
+
+	updatePopoutDuration(self)
+end
+
+local function popoutPreClick(self)
+	if( inCombat ) then
+		return
+	end
+
+	local type, unit, spell = Buff:FindPlayerAssignment(self.unit, self.playerName, self.classToken)
+	self:SetAttribute("type", type)
+	self:SetAttribute("unit", unit)
+	self:SetAttribute("spell", spell)
+end
+
+local function popoutOnUpdate(self, elapsed)
+	self.timeElapsed = self.timeElapsed + elapsed
+	if( self.timeElapsed < 1 ) then
+		return
+	end
+	
+	self.timeElapsed = 0
+	
+	-- Update duration
+	updatePopoutDuration(self)
+	
+	-- Range check
+	local assignedToken = assignments[self.playerName] or assignments[self.classToken]
+	if( not assignedToken ) then
+		self:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r, PaladinBuffer.db.profile.frame.background.g, PaladinBuffer.db.profile.frame.background.b, 1.0)
+		return
+	end
+	
+	local assignedName = PaladinBuffer.blessings[assignedToken]
+	local type = PaladinBuffer.blessingTypes[assignedToken]
+	local secondsLeft = 0
+	
+	local buffID = 1
+	while( true ) do
+		local buffName, rank, texture, count, debuffType, duration, endTime, isMine, isStealable = UnitAura(self.unit, buffID, "PLAYER")
+		if( not buffName ) then break end
+		buffID = buffID + 1
+		
+		if( buffName == assignedName ) then
+			secondsLeft = (endTime - GetTime()) / 60
+			break
+		end
+	end
+		
+	if( IsSpellInRange(assignedName, self.unit) ~= 1 or UnitIsDeadOrGhost(self.unit) ) then
+		self:SetBackdropColor(PaladinBuffer.db.profile.frame.cantRebuff.r, PaladinBuffer.db.profile.frame.cantRebuff.g, PaladinBuffer.db.profile.frame.cantRebuff.b, 1.0)
+	elseif( ( type == "greater" and secondsLeft < PaladinBuffer.db.profile.greaterThreshold ) or ( type == "single" and secondsLeft < PaladinBuffer.db.profile.singleThreshold ) ) then
+		self:SetBackdropColor(PaladinBuffer.db.profile.frame.needRebuff.r, PaladinBuffer.db.profile.frame.needRebuff.g, PaladinBuffer.db.profile.frame.needRebuff.b, 1.0)
+	else
+		self:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r, PaladinBuffer.db.profile.frame.background.g, PaladinBuffer.db.profile.frame.background.b, 1.0)
+	end
+end
+
+function Buff:CreatePopoutFrame(parent)
+	local frame = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate,SecureHandlerShowHideTemplate")
+	frame:SetFrameStrata("MEDIUM")
+	frame:SetHeight(28)
+	frame:SetWidth(65)
+	frame:SetBackdrop(self.backdrop)
+	frame:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r, PaladinBuffer.db.profile.frame.background.g, PaladinBuffer.db.profile.frame.background.b, 1.0)
+	frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
+	frame:RegisterForClicks("AnyDown")
+	frame:HookScript("OnShow", popoutOnShow)
+	frame:SetScript("PreClick", popoutPreClick)
+	frame:SetScript("OnUpdate", popoutOnUpdate)
+	frame.timeElapsed = 5
+	frame:Hide()
+	
+	frame.name = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	frame.name:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, 0)
+	frame.name:SetWidth(65)
+	frame.name:SetHeight(11)
+	frame.name:SetJustifyH("LEFT")
+
+	frame.duration = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	frame.duration:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -3)
+	
+	return frame
+end
+
+local PER_COLUMN = 4
+function Buff:BuildPopoutBar(parent)
+	for _, frame in pairs(parent.popout) do frame:Hide() end
+	
+	local onShow, onHide = "self:RegisterAutoHide(1) \n self:AddToAutoHide(self:GetFrameRef('parent'))", ""
+	local used, inColumn = 0, 0
+	local lastColumn
+	
+	-- Create the group thingys
+	for name, unit in pairs(groupRoster) do
+		local classToken = select(2, UnitClass(unit))
+		if( classToken == parent.filter ) then
+			used = used + 1
+			local popFrame = parent.popout[used]
+			if( not popFrame ) then
+				popFrame = self:CreatePopoutFrame(parent)
+				table.insert(parent.popout, popFrame)
+
+				parent.popout[1]:SetFrameRef("btn" .. used, popFrame)
+			end
+			
+			popFrame.unit = unit
+			popFrame.classToken = classToken
+									
+			-- Position
+			if( used > 1 ) then
+				if( inColumn == PER_COLUMN ) then
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint("TOPRIGHT", lastColumn, "BOTTOMRIGHT", 0, 0)
+
+					lastColumn = popFrame
+					inColumn = 0
+				else
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint("TOPRIGHT", parent.popout[used - 1], "TOPLEFT", -2, 0)
+				end
+			else
+				lastColumn = popFrame
+
+				popFrame:ClearAllPoints()
+				popFrame:SetPoint("TOPRIGHT", parent, "TOPLEFT", -2, -1)
+			end
+
+			inColumn = inColumn + 1
+						
+			onShow = onShow .. "\n self:GetFrameRef('btn" .. used .. "'):Show() \n self:AddToAutoHide(self:GetFrameRef('btn" .. used .. "'))"
+			onHide = onHide .. "\n self:GetFrameRef('btn" .. used .. "'):Hide()"
+		end
+	end
+	
+	-- Now setup this secure stuff
+	if( parent.popout[1] ) then
+		parent:SetFrameRef("popout", parent.popout[1])
+		parent.popout[1]:SetFrameRef("parent", parent)
+		parent.popout[1]:SetAttribute("_onshow", onShow)
+		parent.popout[1]:SetAttribute("_onhide", onHide)
+	end
+end
+
 -- Update the timer every 10 seconds
 local function OnUpdate(self, elapsed)
 	self.timeElapsed = self.timeElapsed + elapsed
@@ -483,8 +769,8 @@ function Buff:CreateSingleFrame(parent)
 		insets = {left = 0, right = 0, top = 0, bottom = 0}
 	}
 
-	local frame = CreateFrame("Button", nil, parent or UIParent, "SecureActionButtonTemplate")
-	frame:SetFrameStrata("MEDIUM")
+	local frame = CreateFrame("Button", nil, parent or UIParent, "SecureActionButtonTemplate,SecureHandlerEnterLeaveTemplate")
+	frame:SetFrameStrata("HIGH")
 	frame:SetHeight(32)
 	frame:SetWidth(65)
 	frame:SetBackdrop(self.backdrop)
@@ -638,6 +924,13 @@ function Buff:UpdateClassFrames()
 			if( not frame ) then
 				frame = self:CreateSingleFrame(self.parent)
 				frame.filter = classToken
+				
+				if( not PaladinBuffer.isStill30 and PaladinBuffer.db.profile.frame.popout ) then
+					frame.popout = {}
+					frame:SetAttribute("_onenter", [[ self:GetFrameRef("popout"):Show() ]])
+
+					self:BuildPopoutBar(frame)
+				end
 				
 				local coords = CLASS_BUTTONS[classToken]
 				frame.icon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")

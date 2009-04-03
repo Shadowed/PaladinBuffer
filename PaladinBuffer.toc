@@ -1,4 +1,4 @@
-## Interface: 30000
+## Interface: 31000
 ## Title: Paladin Buffer
 ## Notes: Simplifies Paladin greater and single blessings inside raids
 ## Author: Mayen

@@ -6,8 +6,8 @@
 -- :IterateOptionsTables() and :GetOptionsTable() always return a function reference that the requesting config handling addon must call with the above arguments.
 -- @class file
 -- @name AceConfigRegistry-3.0
--- @release $Id: AceConfigRegistry-3.0.lua 710 2008-12-19 10:14:39Z nevcairiel $
-local MAJOR, MINOR = "AceConfigRegistry-3.0", 6
+-- @release $Id: AceConfigRegistry-3.0.lua 762 2009-04-02 14:58:04Z nevcairiel $
+local MAJOR, MINOR = "AceConfigRegistry-3.0", 8
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 
 if not lib then return end
@@ -102,11 +102,10 @@ local typedkeys={
 		childGroups=optstring,
 	},
 	execute={
---		func={
---			["function"]=true,
---			["string"]=true, 
---			_="methodname or funcref"
---		},
+		image=optstringfunc,
+		imageCoords=optmethodtable,
+		imageHeight=optnumber,
+		imageWidth=optnumber,
 	},
 	input={
 		pattern=optstring,
@@ -160,8 +159,8 @@ local function validateKey(k,errlvl,...)
 	if type(k)~="string" then
 		err("["..tostring(k).."] - key is not a string", errlvl,...)
 	end
-	if strfind(k, "[%c \127]") then
-		err("["..tostring(k).."] - key name contained spaces (or control characters)", errlvl,...)
+	if strfind(k, "[%c\127]") then
+		err("["..tostring(k).."] - key name contained control characters", errlvl,...)
 	end
 end
 

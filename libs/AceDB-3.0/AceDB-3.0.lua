@@ -1,8 +1,8 @@
 --- AceDB-3.0 allows you to create profiles and smart default values for the SavedVariables of your addon.
 -- @class file
 -- @name AceDB-3.0.lua
--- @release $Id: AceDB-3.0.lua 735 2009-02-14 11:10:48Z nevcairiel $
-local ACEDB_MAJOR, ACEDB_MINOR = "AceDB-3.0", 10
+-- @release $Id: AceDB-3.0.lua 754 2009-03-15 08:50:50Z kaelten $
+local ACEDB_MAJOR, ACEDB_MINOR = "AceDB-3.0", 12
 local AceDB, oldminor = LibStub:NewLibrary(ACEDB_MAJOR, ACEDB_MINOR)
 
 if not AceDB then return end -- No upgrade needed
@@ -566,6 +566,22 @@ function DBObjectLib:RegisterNamespace(name, defaults)
 	if not self.children then self.children = {} end
 	self.children[name] = newDB
 	return newDB
+end
+
+--- Returns an already existing namespace from the database object.
+-- @param name The name of the new namespace
+-- @param silent if true, the addon is optional, silently return nil if its not found 
+-- @usage
+-- local namespace = self.db:GetNamespace('namespace')
+-- @return the namespace object if found
+function DBObjectLib:GetNamespace(name, silent)
+	if type(name) ~= "string" then
+		error("Usage: AceDBObject:GetNamespace(name): 'name' - string expected.", 2)
+	end
+	if not silent and not (self.children and self.children[name]) then
+		error ("Usage: AceDBObject:GetNamespace(name): 'name' - namespace does not exist.", 2)
+	end
+	return self.children[name]
 end
 
 --[[-------------------------------------------------------------------------

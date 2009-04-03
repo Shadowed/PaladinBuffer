@@ -1,7 +1,13 @@
 --- AceEvent-3.0 provides event registration and secure dispatching.
+--
+-- AceEvent-3.0 can be embeded into your addon, either explicitly by calling AceEvent:Embed(MyAddon) or by 
+-- specifying it as an embeded library in your AceAddon. All functions will be available on your addon object
+-- and can be accessed directly, without having to explicitly call AceEvent itself.\\
+-- It is recommended to embed AceEvent, otherwise you'll have to specify a custom `self` on all calls you
+-- make into AceEvent.
 -- @class file
 -- @name AceEvent-3.0
--- @release $Id: AceEvent-3.0.lua 710 2008-12-19 10:14:39Z nevcairiel $
+-- @release $Id: AceEvent-3.0.lua 765 2009-04-03 19:14:41Z nevcairiel $
 local MAJOR, MINOR = "AceEvent-3.0", 3
 local AceEvent = LibStub:NewLibrary(MAJOR, MINOR)
 
@@ -43,12 +49,50 @@ local mixins = {
 	"RegisterMessage", "UnregisterMessage",
 	"SendMessage",
 	"UnregisterAllEvents", "UnregisterAllMessages",
-} 
+}
 
--- AceEvent:Embed( target )
--- target (object) - target object to embed AceEvent in
---
+--- Register for a Blizzard Event.
+-- The callback will always be called with the event as the first argument, and if supplied, the `arg` as second argument.
+-- Any arguments to the event will be passed on after that.
+-- @name AceEvent:RegisterEvent
+-- @class function
+-- @paramsig event[, callback [, arg]]
+-- @param event The event to register for
+-- @param callback The callback function to call when the event is triggered (funcref or method, defaults to a method with the event name)
+-- @param arg An optional argument to pass to the callback function
+
+--- Unregister an event.
+-- @name AceEvent:UnregisterEvent
+-- @class function
+-- @paramsig event
+-- @param event The event to unregister
+
+--- Register for a custom AceEvent-internal message.
+-- The callback will always be called with the event as the first argument, and if supplied, the `arg` as second argument.
+-- Any arguments to the event will be passed on after that.
+-- @name AceEvent:RegisterMessage
+-- @class function
+-- @paramsig message[, callback [, arg]]
+-- @param message The message to register for
+-- @param callback The callback function to call when the message is triggered (funcref or method, defaults to a method with the event name)
+-- @param arg An optional argument to pass to the callback function
+
+--- Unregister a message
+-- @name AceEvent:UnregisterMessage
+-- @class function
+-- @paramsig message
+-- @param message The message to unregister
+
+--- Send a message over the AceEvent-3.0 internal message system to other addons registered for this message.
+-- @name AceEvent:SendMessage
+-- @class function
+-- @paramsig message, ...
+-- @param message The message to send
+-- @param ... Any arguments to the message
+
+
 -- Embeds AceEvent into the target object making the functions from the mixins list available on target:..
+-- @param target target object to embed AceEvent in
 function AceEvent:Embed(target)
 	for k, v in pairs(mixins) do
 		target[v] = self[v]

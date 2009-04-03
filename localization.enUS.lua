@@ -4,6 +4,9 @@ PaladinBufferLocals = {
 	["Warning! Paladin Buffer has been disabled for this character as you are not a Paladin."] = "Warning! Paladin Buffer has been disabled for this character as you are not a Paladin.",
 	["You cannot use Paladin Buffer on a non-Paladin."] = "You cannot use Paladin Buffer on a non-Paladin.",
 	
+	["Dead"] = "Dead",
+	["Offline"] = "Offline",
+	
 	-- Mini buff thingy
 	["Not setup"] = "Not setup",
 	["Smart buff"] = "Smart buff",
@@ -87,6 +90,9 @@ PaladinBufferLocals = {
 	["Hides the entire buff frame while you are in combat."] = "Hides the entire buff frame while you are in combat.",
 	
 	["Show buff frame while ungrouped"] = "Show buff frame while ungrouped",
+	
+	["Enable pop out bar"] = "Enable pop out bar",
+	["Allows you to individually buff players and see there buff status by mousing over there class in the buff frame."] = "Allows you to individually buff players and see there buff status by mousing over there class in the buff frame.",
 	
 	-- Class map
 	["PET"] = "Pet",

@@ -1,10 +1,10 @@
 --- AceConfigDialog-3.0 generates AceGUI-3.0 based windows based on option tables.
 -- @class file
 -- @name AceConfigDialog-3.0
--- @release $Id: AceConfigDialog-3.0.lua 736 2009-02-14 11:13:43Z nevcairiel $
+-- @release $Id: AceConfigDialog-3.0.lua 762 2009-04-02 14:58:04Z nevcairiel $
 
 local LibStub = LibStub
-local MAJOR, MINOR = "AceConfigDialog-3.0", 26
+local MAJOR, MINOR = "AceConfigDialog-3.0", 29
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
 
 if not lib then return end
@@ -1063,7 +1063,33 @@ local function FeedOptions(appName, options,container,rootframe,path,group,inlin
 				local name = GetOptionsMemberValue("name", v, options, path, appName)
 				
 				if v.type == "execute" then
-					control = gui:Create("Button")
+					
+					local imageCoords = GetOptionsMemberValue("imageCoords",v, options, path, appName)
+					local image, width, height = GetOptionsMemberValue("image",v, options, path, appName)
+					
+					if type(image) == 'string' then
+						control = gui:Create("Icon")
+						if not width then
+							width = GetOptionsMemberValue("imageWidth",v, options, path, appName)
+						end
+						if not height then
+							height = GetOptionsMemberValue("imageHeight",v, options, path, appName)
+						end
+						if type(imageCoords) == 'table' then
+							control:SetImage(image, unpack(imageCoords))
+						else
+							control:SetImage(image)
+						end
+						if type(width) ~= "number" then
+							width = 32
+						end
+						if type(height) ~= "number" then
+							height = 32
+						end
+						control:SetImageSize(width, height)
+					else
+						control = gui:Create("Button")
+					end
 					control:SetText(name)
 					control:SetCallback("OnClick",ActivateControl)
 
@@ -1582,6 +1608,12 @@ local function RefreshOnUpdate(this)
 		if lib.OpenFrames[appName] then
 			lib.OpenFrames[appName]:Hide()
 		end
+		if lib.BlizOptions and lib.BlizOptions[appName] then
+			local widget = lib.BlizOptions[appName]
+			if not widget:IsVisible() then
+				widget:ReleaseChildren()
+			end
+		end
 		this.closing[appName] = nil
 	end
 	
@@ -1722,7 +1754,9 @@ local function FeedToBlizPanel(widget, event)
 end
 
 local function ClearBlizPanel(widget, event)
-	widget:ReleaseChildren()
+	local appName = widget:GetUserData('appName')
+	lib.frame.closing[appName] = true
+	lib.frame:SetScript("OnUpdate", RefreshOnUpdate)
 end
 
 function lib:AddToBlizOptions(appName, name, parent, ...)
