@@ -124,7 +124,6 @@ function Sync:SendBlessingData()
 		return
 	end
 	
-	
 	if( not PaladinBuffer.foundSpells ) then
 		PaladinBuffer:ScanSpells()
 	end
@@ -193,6 +192,10 @@ end
 
 -- RECEIVED SYNC DATA
 function Sync:OnCommReceived(prefix, msg, type, sender)
+	if( sender == playerName ) then
+		return
+	end
+	
 	local cmd, arg = string.match(msg, "([a-zA-Z+]+): (.+)")
 	if( not cmd or not arg ) then
 		cmd = msg
@@ -218,7 +221,7 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	-- Blessing data
 	elseif( cmd == "BLESSINGS" ) then
 		PaladinBuffer:ResetBlessingData(sender)
-		self:ParseTalents(sender, string.split(":", talents))
+		self:ParseTalents(sender, string.split(":", arg))
 			
 	-- Reset + Assign, this implies that any data not present is there because they aren't assigned it
 	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
@@ -422,8 +425,7 @@ function Sync:ParsePPBlessingData(sender, singleType, greaterType, rank, improve
 end
 
 function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
-	--[[
-	if( sender == playerName ) then
+	--[[if( sender == playerName ) then
 		print(" <-- ", prefix, sender, msg)
 	else
 		print(" --> ", prefix, sender, msg)
@@ -431,7 +433,7 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 	]]
 	
 	-- Make sure we want this message
-	if( prefix ~= "PLPWR" or not PaladinBuffer.db.profile.ppSupport or supportsPP[sender] or ( type ~= "PARTY" and type ~= "RAID" ) ) then
+	if( prefix ~= "PLPWR" or sender == playerName or not PaladinBuffer.db.profile.ppSupport or supportsPP[sender] or ( type ~= "PARTY" and type ~= "RAID" ) ) then
 		return
 	end
 	
