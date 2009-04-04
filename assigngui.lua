@@ -414,7 +414,6 @@ end
 
 -- Quick assign!
 local function quickAssignBlessings()
-	PaladinBuffer.modules.Assign:SetHighestBlessers()
 	PaladinBuffer.modules.Assign:CalculateBlessings()
 	PaladinBuffer.modules.Sync:SendAssignments()
 end

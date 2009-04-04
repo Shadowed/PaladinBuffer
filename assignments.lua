@@ -3,6 +3,7 @@ if( not PaladinBuffer ) then return end
 local Assign = PaladinBuffer:NewModule("Assign", "AceEvent-3.0", "AceComm-3.0")
 local blessings, priorities, currentSort, assignments, blacklist
 local singleToGreater = {["might"] = "gmight", ["kings"] = "gkings", ["wisdom"] = "gwisdom", ["sanct"] = "gsanct"}
+local pointsInfo = {}
 
 -- Create our tables for doing smart assignments
 function Assign:CreateTables()
@@ -54,25 +55,14 @@ local function sortOrder(a, b)
 		return true
 	end
 	
-	return PaladinBuffer.db.profile.blessings[a][currentSort] > PaladinBuffer.db.profile.blessings[b][currentSort]
+	return pointsInfo[a] < pointsInfo[b]
 end
 
-function Assign:SetHighestBlessers()
-	self:CreateTables()
-	
+function Assign:SetHighestBlessers(classToken)
+	-- Reset our list
 	for _, list in pairs(blessings) do for i=#(list), 1, -1 do table.remove(list, i) end end
-	--[[
-	-- Load them into a list of of who has what blessing
-	for name, data in pairs(PaladinBuffer.db.profile.blessings) do
-		for spellToken, rank in pairs(data) do
-			if( rank ~= "none" and PaladinBuffer.blessingTypes[spellToken] == "greater" ) then
-				blessings[spellToken][name] = rank
-			end
-		end
-	end
-	]]
 	
-	-- Load them into a list of of who has what blessing
+	-- Load the list of players by blessing into a table
 	for name, data in pairs(PaladinBuffer.db.profile.blessings) do
 		for spellToken, rank in pairs(data) do
 			if( rank ~= "none" and PaladinBuffer.blessingTypes[spellToken] == "greater" ) then
@@ -81,115 +71,49 @@ function Assign:SetHighestBlessers()
 		end
 	end
 	
-	
-	-- Now sort it
+	-- Now go through that list
 	for spellToken, list in pairs(blessings) do
 		currentSort = spellToken
+		
+		-- What this does is find the person who is least likely to conflict with someone else, and ultimately give the highest blessing assignment		
+		for k in pairs(pointsInfo) do pointsInfo[k] = nil end
+		for name, data in pairs(PaladinBuffer.db.profile.blessings) do
+			pointsInfo[name] = pointsInfo[name] or 0
+
+			for token, rank in pairs(data) do
+				if( token == spellToken ) then
+					pointsInfo[name] = pointsInfo[name] - (rank * 1000)
+				else
+					-- Find the blessing priority
+					local priority = 10
+					for pID, pToken in pairs(priorities[classToken]) do
+						if( pToken == token ) then
+							priority = pID * 10
+							break
+						end
+					end
+
+					-- Add it up
+					pointsInfo[name] = pointsInfo[name] + (rank * (100 - priority))
+				end
+			end
+		end
+
+		-- Sort it with our least likely conflicter
 		table.sort(list, sortOrder)
 	end
 end
 
---[[
-function Assign:IsBlacklistHigher(name, priorityID, spellToken, classToken)
-	-- They have an assignment to this class, and they aren't already assigned to it
-	if( assignments[classToken][name] and assignments[classToken][name] ~= spellToken ) then
-		local assignedPriority
-		-- Find out what the priority of the assignment is
-		for id, token in pairs(priorities[classToken]) do
-			if( token == assignments[classToken][name] ) then
-				assignedPriority = id
-				break
-			end
-		end
-		
-		if( not assignedPriority ) then
-			return true
-		end
-		
-		-- If the assigned priority is higher than the one we passed should overwrite the assignment
-		return assignedPriority > priorityID, assignedPriority
-	end
-	
-	-- Not assigned to this class yet
-	return true
-end
-
-function Assign:RecurseBlessingAssign(priorityID, classToken, isRecursed)
-	local spellToken = priorities[classToken][priorityID]
-	if( not spellToken ) then
-		return
-	end
-	
-	print("Assigning priority ID", priorityID, spellToken, classToken)
-		
-	-- Find the highest one who can buff this, that isn't blacklisted
-	local highestAvailable = 0
-	local lastAssigned
-	for name, rank in pairs(blessings[spellToken]) do
-		if( highestAvailable <= rank and not assignments[classToken][name] ) then
-			highestAvailable = rank
-			lastAssigned = name
-		end
-	end
-
-	-- We didn't find one looking for people with unassigned blessings, now find one that beats the priority list
-	if( highestAvailable == 0 ) then
-		for name, rank in pairs(blessings[spellToken]) do
-			if( highestAvailable <= rank and self:IsBlacklistHigher(name, priorityID, spellToken, classToken) ) then
-				highestAvailable = rank
-				lastAssigned = name
-			end
-		end
-	end
-	
-	-- We have an assignment
-	if( lastAssigned ) then
-		local previousToken = assignments[classToken][lastAssigned]
-		
-		print("Assigning", lastAssigned, " to", classToken, spellToken)
-		assignments[classToken][lastAssigned] = spellToken
-		
-		-- We had another blessing assigned to this class, so do a recursive assignment
-		if( previousToken and previousToken ~= spellToken ) then
-			for id, token in pairs(priorities[classToken]) do
-				if( token == previousToken ) then
-					print("Player", name, "already was assigned to", previousToken, "recursing to reassign.")
-					self:RecurseBlessingAssign(id, classToken, true)
-					break
-				end
-			end
-		end
-	end
-	
-	if( isRecursed ) then
-		print("Was a recursive assignment for", priorityID, "done.")
-		return
-	end
-	
-	print("Finished assignment", priorityID, ", going to next one.")
-	self:RecurseBlessingAssign(priorityID - 1, classToken)
-end
-
 function Assign:CalculateBlessings()
-	for _, list in pairs(assignments) do for k in pairs(list) do list[k] = nil end end
+	self:CreateTables()
 	
-	for classToken, classPriorities in pairs(priorities) do
-		for k in pairs(blacklist) do blacklist[k] = nil end
-		
-		if( classToken == "PALADIN" ) then
-			self:RecurseBlessingAssign(#(classPriorities), classToken)
-			return
-		end
-	end
-end
-]]
-
-function Assign:CalculateBlessings()
+	-- Reset assignments
 	for _, list in pairs(assignments) do for k in pairs(list) do list[k] = nil end end
 	
 	-- Loop through and do all of our fancy assigning
 	for classToken, classPriorities in pairs(priorities) do
 		for k in pairs(blacklist) do blacklist[k] = nil end
+		self:SetHighestBlessers(classToken)
 		
 		-- Loop through the priorities in order
 		for _, spellToken in pairs(classPriorities) do
