@@ -122,6 +122,10 @@ function Buff:PLAYER_REGEN_ENABLED()
 	if( self.frame ) then
 		self.frame.icon:SetAlpha(1.0)
 		self.frame:Show()
+		
+		for _, frame in pairs(classFrames) do
+			frame.icon:SetAlpha(1.0)
+		end
 	end
 end
 
