@@ -75,6 +75,11 @@ local function assignBlessing(self)
 	else
 		PaladinBuffer:AssignBlessing(self.playerName, spellToken, self.classToken)
 	end
+
+	-- Stop others changing the assignments from messing ours up
+	if( PaladinBuffer.db.profile.autoLock ) then
+		Assign:LockAssignments()
+	end
 end
 
 -- Assignment buttons for each class
@@ -407,6 +412,11 @@ end
 local function OnHide(self)
 	Assign:UnregisterAllMessages()
 	
+	-- If we automatically lock it, unlock it when we hide
+	--if( PaladinBuffer.db.profile.autoLock ) then
+	--	Assign:UnlockAssignments()
+	--end
+
 	if( Assign.singleFrame ) then
 		Assign.choiceFrame:Hide()
 	end
@@ -416,12 +426,16 @@ end
 local function quickAssignBlessings()
 	PaladinBuffer.modules.Assign:CalculateBlessings()
 	PaladinBuffer.modules.Sync:SendAssignments()
+
+	Assign:LockAssignments()
 end
 
 -- Reset everything
 local function clearAllBlessings()
 	PaladinBuffer:ClearAllAssignments()
 	PaladinBuffer.modules.Sync:SendAssignmentReset()
+
+	Assign:UnlockAssignments()
 end
 
 -- Refresh blessing data
@@ -440,11 +454,13 @@ local function refreshBlessingData(self)
 	self:SetScript("OnUpdate", throttleUpdate)
 	
 	PaladinBuffer.modules.Sync:RequestData()
+	Assign:UnlockAssignments()
 end
 
 -- Push blessings to the group
 local function pushBlessings()
 	PaladinBuffer.modules.Sync:SendAssignments()
+	Assign:UnlockAssignments()
 end
 
 -- Show the single blessing UI
@@ -456,6 +472,35 @@ local function singleAssignBlessings()
 	else
 		Assign.choiceFrame:Show()
 	end
+end
+
+function Assign:LockAssignments()
+	self.assignmentsLocked = true
+
+	if( self.frame and self.frame.lock ) then
+		self.frame.lock:SetText(L["Unlock"])
+	end
+end
+
+function Assign:UnlockAssignments()
+	self.assignmentsLocked = false
+
+	if( self.frame and self.frame.lock ) then
+		self.frame.lock:SetText(L["Lock"])
+	end
+end
+
+-- Tooltips
+local function showTooltip(self)
+	if( self.tooltip ) then
+		GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+		GameTooltip:SetText(self.tooltip, nil, nil, nil, nil, true)
+		GameTooltip:Show()
+	end
+end
+
+local function hideTooltip(self)
+	GameTooltip:Hide()
 end
 
 function Assign:CreateFrame()
@@ -554,12 +599,35 @@ function Assign:CreateFrame()
 	push:SetNormalFontObject(GameFontHighlightSmall)
 	push:SetHighlightFontObject(GameFontHighlightSmall)
 	push:SetHeight(18)
-	push:SetWidth(113)
-	push:SetText(L["Push assignments"])
+	push:SetWidth(55)
+	push:SetText(L["Push"])
+	push:SetScript("OnEnter", showTooltip)
+	push:SetScript("OnLeave", hideTooltip)
 	push:SetScript("OnClick", pushBlessings)
 	push:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 4, -10)
+	push.tooltip = L["Push blessing assignments for Paladins."]
 	
 	self.frame.push = push
+
+	local lock = CreateFrame("Button", nil, self.frame, "UIPanelButtonGrayTemplate")
+	lock:SetNormalFontObject(GameFontHighlightSmall)
+	lock:SetHighlightFontObject(GameFontHighlightSmall)
+	lock:SetHeight(18)
+	lock:SetWidth(55)
+	lock:SetText(L["Lock"])
+	lock:SetScript("OnEnter", showTooltip)
+	lock:SetScript("OnLeave", hideTooltip)
+	lock:SetScript("OnClick", function()
+		if( Assign.assignmentsLocked ) then
+			Assign:UnlockAssignments()
+		else
+			Assign:LockAssignments()
+		end
+	end)
+	lock:SetPoint("TOPLEFT", push, "TOPRIGHT", 2, 0)
+	lock.tooltip = L["Ignores all changes to assignments made by other people until you manually uncheck this, push assignments, clear or manually refresh them."]
+	
+	self.frame.lock = lock
 
 	local resetAll = CreateFrame("Button", nil, self.frame, "UIPanelButtonGrayTemplate")
 	resetAll:SetNormalFontObject(GameFontHighlightSmall)

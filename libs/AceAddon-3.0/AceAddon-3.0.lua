@@ -28,7 +28,7 @@
 -- end
 -- @class file
 -- @name AceAddon-3.0.lua
--- @release $Id: AceAddon-3.0.lua 765 2009-04-03 19:14:41Z nevcairiel $
+-- @release $Id: AceAddon-3.0.lua 777 2009-04-04 20:16:09Z nevcairiel $
 local MAJOR, MINOR = "AceAddon-3.0", 5
 local AceAddon, oldminor = LibStub:NewLibrary(MAJOR, MINOR)
 
@@ -101,6 +101,9 @@ local Enable, Disable, EnableModule, DisableModule, Embed, NewModule, GetModule,
 local function addontostring( self ) return self.name end 
 
 --- Create a new AceAddon-3.0 addon.
+-- Any libraries you specified will be embeded, and the addon will be scheduled for 
+-- its OnInitialize and OnEnable callbacks.
+-- The final addon object, with all libraries embeded, will be returned.
 -- @paramsig [object ,]name[, lib, ...]
 -- @param object Table to use as a base for the addon (optional)
 -- @param name Name of the addon object to create
@@ -112,7 +115,6 @@ local function addontostring( self ) return self.name end
 -- -- Create a Addon object based on the table of a frame
 -- local MyFrame = CreateFrame("Frame")
 -- MyAddon = LibStub("AceAddon-3.0"):NewAddon(MyFrame, "MyAddon", "AceEvent-3.0")
--- @return The newly created addon object
 function AceAddon:NewAddon(objectorname, ...)
 	local object,name
 	local i=1
@@ -160,7 +162,6 @@ end
 -- @usage 
 -- -- Get the Addon
 -- MyAddon = LibStub("AceAddon-3.0"):GetAddon("MyAddon")
--- @return The addon object, if found
 function AceAddon:GetAddon(name, silent)
 	if not silent and not self.addons[name] then
 		error(("Usage: GetAddon(name): 'name' - Cannot find an AceAddon '%s'."):format(tostring(name)), 2)
@@ -168,8 +169,11 @@ function AceAddon:GetAddon(name, silent)
 	return self.addons[name]
 end
 
---- Embed a list of libraries into the specified addon.
--- Note: This function is for internal use by :NewAddon/:NewModule
+-- - Embed a list of libraries into the specified addon.
+-- This function will try to embed all of the listed libraries into the addon
+-- and error if a single one fails.
+--
+-- **Note:** This function is for internal use by :NewAddon/:NewModule
 -- @paramsig addon, [lib, ...]
 -- @param addon addon object to embed the libs in
 -- @param lib List of libraries to embed into the addon
@@ -180,8 +184,12 @@ function AceAddon:EmbedLibraries(addon, ...)
 	end
 end
 
---- Embed a library into the addon object.
--- Note: This function is for internal use by :EmbedLibraries
+-- - Embed a library into the addon object.
+-- This function will check if the specified library is registered with LibStub
+-- and if it has a :Embed function to call. It'll error if any of those conditions
+-- fails.
+--
+-- **Note:** This function is for internal use by :EmbedLibraries
 -- @paramsig addon, libname[, silent[, offset]]
 -- @param addon addon object to embed the library in
 -- @param libname name of the library to embed
@@ -202,6 +210,7 @@ end
 
 --- Return the specified module from an addon object.
 -- Throws an error if the addon object cannot be found (except if silent is set)
+-- @name //addon//:GetModule
 -- @paramsig name[, silent]
 -- @param name unique name of the module
 -- @param silent if true, the module is optional, silently return nil if its not found (optional)
@@ -210,7 +219,6 @@ end
 -- MyAddon = LibStub("AceAddon-3.0"):GetAddon("MyAddon")
 -- -- Get the Module
 -- MyModule = MyAddon:GetModule("MyModule")
--- @return the module object, if found
 function GetModule(self, name, silent)
 	if not self.modules[name] and not silent then
 		error(("Usage: GetModule(name, silent): 'name' - Cannot find module '%s'."):format(tostring(name)), 2)
@@ -224,6 +232,7 @@ local function IsModuleTrue(self) return true end
 -- The new module can have its own embeded libraries and/or use a module prototype to be mixed into the module.\\
 -- A module has the same functionality as a real addon, it can have modules of its own, and has the same API as
 -- an addon object.
+-- @name //addon//:NewModule
 -- @paramsig name[, prototype|lib[, lib, ...]]
 -- @param name unique name of the module
 -- @param prototype object to derive this module from, methods and values from this table will be mixed into the module (optional)
@@ -235,7 +244,6 @@ local function IsModuleTrue(self) return true end
 -- -- Create a module with a prototype
 -- local prototype = { OnEnable = function(self) print("OnEnable called!") end }
 -- MyModule = MyAddon:NewModule("MyModule", prototype, "AceEvent-3.0", "AceHook-3.0")
--- @return the module object, if successfull
 function NewModule(self, name, prototype, ...)
 	if type(name) ~= "string" then error(("Usage: NewModule(name, [prototype, [lib, lib, lib, ...]): 'name' - string expected got '%s'."):format(type(name)), 2) end
 	if type(prototype) ~= "string" and type(prototype) ~= "table" and type(prototype) ~= "nil" then error(("Usage: NewModule(name, [prototype, [lib, lib, lib, ...]): 'prototype' - table (prototype), string (lib) or nil expected got '%s'."):format(type(prototype)), 2) end
@@ -274,11 +282,11 @@ function NewModule(self, name, prototype, ...)
 end
 
 --- Returns the real name of the addon or module, without any prefix.
+-- @name //addon//:GetName
 -- @paramsig 
 -- @usage 
 -- print(MyAddon:GetName())
 -- -- prints "MyAddon"
--- @return The name of the addon or module
 function GetName(self)
 	return self.moduleName or self.name
 end
@@ -287,13 +295,13 @@ end
 -- This internally calls AceAddon:EnableAddon(), thus dispatching a OnEnable callback
 -- and enabling all modules of the addon (unless explicitly disabled).\\
 -- :Enable() also sets the internal `enableState` variable to true
+-- @name //addon//:Enable
 -- @paramsig 
 -- @usage 
 -- -- Enable MyModule
 -- MyAddon = LibStub("AceAddon-3.0"):GetAddon("MyAddon")
 -- MyModule = MyAddon:GetModule("MyModule")
 -- MyModule:Enable()
--- @return true if the addon was enabled successfully
 function Enable(self)
 	self:SetEnabledState(true)
 	return AceAddon:EnableAddon(self)
@@ -303,12 +311,12 @@ end
 -- This internally calls AceAddon:DisableAddon(), thus dispatching a OnDisable callback
 -- and disabling all modules of the addon.\\
 -- :Disable() also sets the internal `enableState` variable to false
+-- @name //addon//:Disable
 -- @paramsig 
 -- @usage 
 -- -- Disable MyAddon
 -- MyAddon = LibStub("AceAddon-3.0"):GetAddon("MyAddon")
 -- MyAddon:Disable()
--- @return true if the addon was disabled successfully
 function Disable(self)
 	self:SetEnabledState(false)
 	return AceAddon:DisableAddon(self)
@@ -316,6 +324,7 @@ end
 
 --- Enables the Module, if possible, return true or false depending on success.
 -- Short-hand function that retrieves the module via `:GetModule` and calls `:Enable` on the module object.
+-- @name //addon//:EnableModule
 -- @paramsig name
 -- @usage 
 -- -- Enable MyModule using :GetModule
@@ -326,8 +335,6 @@ end
 -- -- Enable MyModule using the short-hand
 -- MyAddon = LibStub("AceAddon-3.0"):GetAddon("MyAddon")
 -- MyAddon:EnableModule("MyModule")
--- @return true if the module was enabled successfully
--- @see Enable
 function EnableModule(self, name)
 	local module = self:GetModule( name )
 	return module:Enable()
@@ -335,6 +342,7 @@ end
 
 --- Disables the Module, if possible, return true or false depending on success.
 -- Short-hand function that retrieves the module via `:GetModule` and calls `:Disable` on the module object.
+-- @name //addon//:DisableModule
 -- @paramsig name
 -- @usage 
 -- -- Disable MyModule using :GetModule
@@ -345,8 +353,6 @@ end
 -- -- Disable MyModule using the short-hand
 -- MyAddon = LibStub("AceAddon-3.0"):GetAddon("MyAddon")
 -- MyAddon:DisableModule("MyModule")
--- @return true if the module was disabled successfully
--- @see Disable
 function DisableModule(self, name)
 	local module = self:GetModule( name )
 	return module:Disable()
@@ -354,6 +360,7 @@ end
 
 --- Set the default libraries to be mixed into all modules created by this object.
 -- Note that you can only change the default module libraries before any module is created.
+-- @name //addon//:SetDefaultModuleLibraries
 -- @paramsig lib[, lib, ...]
 -- @param lib List of libraries to embed into the addon
 -- @usage 
@@ -372,6 +379,7 @@ end
 
 --- Set the default state in which new modules are being created.
 -- Note that you can only change the default state before any module is created.
+-- @name //addon//:SetDefaultModuleState
 -- @paramsig state
 -- @param state Default state for new modules, true for enabled, false for disabled
 -- @usage 
@@ -391,6 +399,7 @@ end
 
 --- Set the default prototype to use for new modules on creation.
 -- Note that you can only change the default prototype before any module is created.
+-- @name //addon//:SetDefaultModulePrototype
 -- @paramsig prototype
 -- @param prototype Default prototype for the new modules (table)
 -- @usage 
@@ -414,7 +423,8 @@ function SetDefaultModulePrototype(self, prototype)
 end
 
 --- Set the state of an addon or module
--- This should only be caleld before any enabling actually happend, aka in/before OnInitialize.
+-- This should only be called before any enabling actually happend, e.g. in/before OnInitialize.
+-- @name //addon//:SetEnabledState
 -- @paramsig state
 -- @param state the state of an addon or module  (enabled=true, disabled=false)
 function SetEnabledState(self, state)
@@ -423,27 +433,27 @@ end
 
 
 --- Return an iterator of all modules associated to the addon.
+-- @name //addon//:IterateModules
 -- @paramsig 
 -- @usage 
 -- -- Enable all modules
 -- for name, module in MyAddon:IterateModules() do
 --    module:Enable()
 -- end
--- @return Iterator of all modules
 local function IterateModules(self) return pairs(self.modules) end
 
 -- Returns an iterator of all embeds in the addon
+-- @name //addon//:IterateEmbeds
 -- @paramsig 
--- @return Iterator of all embeded libraries
 local function IterateEmbeds(self) return pairs(AceAddon.embeds[self]) end
 
 --- Query the enabledState of an addon.
+-- @name //addon//:IsEnabled
 -- @paramsig 
 -- @usage 
 -- if MyAddon:IsEnabled() then
 --     MyAddon:Disable()
 -- end
--- @return true if the addon/module is enabled, false otherwise
 local function IsEnabled(self) return self.enabledState end
 local mixins = {
 	NewModule = NewModule,
@@ -481,11 +491,12 @@ function Embed(target)
 end
 
 
---- Initialize the addon after creation.
--- Note: This function is only used internally during the ADDON_LOADED event
+-- - Initialize the addon after creation.
+-- This function is only used internally during the ADDON_LOADED event
 -- It will call the **OnInitialize** function on the addon object (if present), 
--- and the **OnEmbedInitialize** function on all embeded libraries. \\
--- Do not call this function manually, unless you're absolutely sure that you know what you are doing.
+-- and the **OnEmbedInitialize** function on all embeded libraries.
+-- 
+-- **Note:** Do not call this function manually, unless you're absolutely sure that you know what you are doing.
 -- @param addon addon object to intialize
 function AceAddon:InitializeAddon(addon)
 	safecall(addon.OnInitialize, addon)
@@ -500,13 +511,15 @@ function AceAddon:InitializeAddon(addon)
 	-- from the event handler and only done _once_
 end
 
---- Enable the addon after creation.
+-- - Enable the addon after creation.
 -- Note: This function is only used internally during the PLAYER_LOGIN event, or during ADDON_LOADED,
 -- if IsLoggedIn() already returns true at that point, e.g. for LoD Addons.
 -- It will call the **OnEnable** function on the addon object (if present), 
 -- and the **OnEmbedEnable** function on all embeded libraries.\\
--- This function does not toggle the enable state of the addon itself, and will return early if the addon is disabled.\\
--- **Note:** Do not call this function manually, unless you're absolutely sure that you know what you are doing. Use :Enable on the addon itself instead.
+-- This function does not toggle the enable state of the addon itself, and will return early if the addon is disabled.
+--
+-- **Note:** Do not call this function manually, unless you're absolutely sure that you know what you are doing.
+-- Use :Enable on the addon itself instead.
 -- @param addon addon object to enable
 function AceAddon:EnableAddon(addon)
 	if type(addon) == "string" then addon = AceAddon:GetAddon(addon) end
@@ -533,12 +546,14 @@ function AceAddon:EnableAddon(addon)
 	return self.statuses[addon.name] -- return true if we're disabled
 end
 
---- Disable the addon
+-- - Disable the addon
 -- Note: This function is only used internally.
 -- It will call the **OnDisable** function on the addon object (if present), 
 -- and the **OnEmbedDisable** function on all embeded libraries.\\
--- This function does not toggle the enable state of the addon itself, and will return early if the addon is still enabled.\\
--- **Note:** Do not call this function manually, unless you're absolutely sure that you know what you are doing. Use :Disable on the addon itself instead.
+-- This function does not toggle the enable state of the addon itself, and will return early if the addon is still enabled.
+--
+-- **Note:** Do not call this function manually, unless you're absolutely sure that you know what you are doing. 
+-- Use :Disable on the addon itself instead.
 -- @param addon addon object to enable
 function AceAddon:DisableAddon(addon)
 	if type(addon) == "string" then addon = AceAddon:GetAddon(addon) end
@@ -565,16 +580,12 @@ function AceAddon:DisableAddon(addon)
 	return not self.statuses[addon.name] -- return true if we're disabled
 end
 
---The next few funcs are just because no one should be reaching into the internal registries
---Thoughts?
-
 --- Get an iterator over all registered addons.
 -- @usage 
 -- -- Print a list of all installed AceAddon's
 -- for name, addon in AceAddon:IterateAddons() do
 --   print("Addon: " .. name)
 -- end
--- @return Iterator over all addons (pairs)
 function AceAddon:IterateAddons() return pairs(self.addons) end
 
 --- Get an iterator over the internal status registry.
@@ -585,7 +596,6 @@ function AceAddon:IterateAddons() return pairs(self.addons) end
 --     print("EnabledAddon: " .. name)
 --   end
 -- end
--- @return Iterator over the status registry
 function AceAddon:IterateAddonStatus() return pairs(self.statuses) end
 
 -- Following Iterators are deprecated, and their addon specific versions should be used

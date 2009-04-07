@@ -1,8 +1,43 @@
---- AceDB-3.0 allows you to create profiles and smart default values for the SavedVariables of your addon.
+--- **AceDB-3.0** manages the SavedVariables of your addon.
+-- It offers profile management, smart defaults and namespaces for modules.\\
+-- Data can be saved in different data-types, depending on its intended usage.
+-- The most common data-type is the `profile` type, which allows the user to choose
+-- the active profile, and manage the profiles of all of his characters.\\
+-- The following data types are available:
+-- * **char** Character-specific data. Every character has its own database.
+-- * **realm** Realm-specific data. All of the players characters on the same realm share this database.
+-- * **class** Class-specific data. All of the players characters of the same class share this database.
+-- * **race** Race-specific data. All of the players characters of the same race share this database.
+-- * **faction** Faction-specific data. All of the players characters of the same faction share this database.
+-- * **factionrealm** Faction and realm specific data. All of the players characters on the same realm and of the same faction share this database.
+-- * **global** Global Data. All characters on the same account share this database.
+-- * **profile** Profile-specific data. All characters using the same profile share this database. The user can control which profile should be used.
+--
+-- Creating a new Database using the `:New` function will return a new DBObject. A database will inherit all functions
+-- of the DBObjectLib listed here. \\
+-- If you create a new namespaced child-database (`:RegisterNamespace`), you'll get a DBObject as well, but note
+-- that the child-databases cannot individually change their profile, and are linked to their parents profile - and because of that,
+-- the profile related APIs are not available. Only `:RegisterDefaults` and `:ResetProfile` are available on child-databases.
+--
+-- For more details on how to use AceDB-3.0, see the [[AceDB-3.0 Tutorial]].
+-- @usage
+-- MyAddon = LibStub("AceAddon-3.0"):NewAddon("DBExample")
+--
+-- -- declare defaults to be used in the DB
+-- local defaults = {
+--   profile = {
+--     setting = true,
+--   }
+-- }
+--
+-- function MyAddon:OnInitialize()
+--   -- Assuming the .toc says ## SavedVariables: MyAddonDB
+--   self.db = LibStub("AceDB-3.0"):New("MyAddonDB", defaults, true)
+-- end
 -- @class file
 -- @name AceDB-3.0.lua
--- @release $Id: AceDB-3.0.lua 754 2009-03-15 08:50:50Z kaelten $
-local ACEDB_MAJOR, ACEDB_MINOR = "AceDB-3.0", 12
+-- @release $Id: AceDB-3.0.lua 788 2009-04-06 10:15:46Z nevcairiel $
+local ACEDB_MAJOR, ACEDB_MINOR = "AceDB-3.0", 13
 local AceDB, oldminor = LibStub:NewLibrary(ACEDB_MAJOR, ACEDB_MINOR)
 
 if not AceDB then return end -- No upgrade needed
@@ -221,6 +256,9 @@ local function initdb(sv, defaults, defaultProfile, olddb, parent)
 	
 	-- Make a container for profile keys
 	if not sv.profileKeys then sv.profileKeys = {} end
+	
+	-- map "true" to our "Default" profile
+	if defaultProfile == true then defaultProfile = "Default" end
 	
 	-- Try to get the profile selected from the char db
 	local profileKey = sv.profileKeys[charKey] or defaultProfile or charKey
@@ -588,11 +626,24 @@ end
 	AceDB Exposed Methods
 ---------------------------------------------------------------------------]]
 
---- Creates a new database object that can be used to handle database settings
--- and profiles.
--- @param name The name of variable, or table to use for the database
+--- Creates a new database object that can be used to handle database settings and profiles.
+-- By default, an empty DB is created, using a character specific profile.
+--
+-- You can override the default profile used by passing any profile name as the third argument,
+-- or by passing //true// as the third argument to use a globally shared profile called "Default".
+--
+-- Note that there is no token replacement in the default profile name, passing a defaultProfile as "char"
+-- will use a profile named "char", and not a character-specific profile.
+-- @param tbl The name of variable, or table to use for the database
 -- @param defaults A table of database defaults
--- @param defaultProfile The name of the default profile
+-- @param defaultProfile The name of the default profile. If not set, a character specific profile will be used as the default.
+-- You can also pass //true// to use a shared global profile called "Default".
+-- @usage
+-- -- Create an empty DB using a character-specific default profile.
+-- self.db = LibStub("AceDB-3.0"):New("MyAddonDB")
+-- @usage
+-- -- Create a DB using defaults and using a shared default profile
+-- self.db = LibStub("AceDB-3.0"):New("MyAddonDB", defaults, true)
 function AceDB:New(tbl, defaults, defaultProfile)
 	if type(tbl) == "string" then
 		local name = tbl
@@ -611,8 +662,8 @@ function AceDB:New(tbl, defaults, defaultProfile)
 		error("Usage: AceDB:New(tbl, defaults, defaultProfile): 'defaults' - table expected.", 2)
 	end
 	
-	if defaultProfile and type(defaultProfile) ~= "string" then
-		error("Usage: AceDB:New(tbl, defaults, defaultProfile): 'defaultProfile' - string expected.", 2)
+	if defaultProfile and type(defaultProfile) ~= "string" and defaultProfile ~= true then
+		error("Usage: AceDB:New(tbl, defaults, defaultProfile): 'defaultProfile' - string or true expected.", 2)
 	end
 	
 	return initdb(tbl, defaults, defaultProfile)
@@ -626,5 +677,6 @@ for db in pairs(AceDB.db_registry) do
 		end
 	else
 		db.RegisterDefaults = DBObjectLib.RegisterDefaults
+		db.ResetProfile = DBObjectLib.ResetProfile
 	end
 end

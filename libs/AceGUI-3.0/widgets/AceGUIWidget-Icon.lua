@@ -5,10 +5,10 @@ local AceGUI = LibStub("AceGUI-3.0")
 --------------------------
 do
 	local Type = "Icon"
-	local Version = 5
+	local Version = 8
 	
 	local function OnAcquire(self)
-		self:SetText("")
+		self:SetLabel("")
 		self:SetImage(nil)
 		self:SetImageSize(64, 64)
 	end
@@ -18,7 +18,7 @@ do
 		self.frame:Hide()
 	end
 	
-	local function SetText(self, text)
+	local function SetLabel(self, text)
 		if text and text ~= "" then
 			self.label:Show()
 			self.label:SetText(text)
@@ -55,17 +55,19 @@ do
 		end
 	end
 	
-	local function OnClick(this)
-		this.obj:Fire("OnClick")
+	local function OnClick(this, button)
+		this.obj:Fire("OnClick", button)
 		AceGUI:ClearFocus()
 	end
 	
 	local function OnEnter(this)
 		this.obj.highlight:Show()
+		this.obj:Fire("OnEnter")
 	end
 	
 	local function OnLeave(this)
 		this.obj.highlight:Hide()
+		this.obj:Fire("OnLeave")
 	end
 
 	local function Constructor()
@@ -75,10 +77,13 @@ do
 		
 		self.OnRelease = OnRelease
 		self.OnAcquire = OnAcquire
-		self.SetText = SetText
+		self.SetLabel = SetLabel
 		self.frame = frame
 		self.SetImage = SetImage
 		self.SetImageSize = SetImageSize
+		
+		-- SetText should be deprecated along the way
+		self.SetText = SetLabel
 
 		frame.obj = self
 		

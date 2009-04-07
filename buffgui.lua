@@ -62,6 +62,7 @@ function Buff:UpdateFrame()
 	end
 
 	for _, frame in pairs(classFrames) do
+		self:UpdateClassFrames()
 		self:UpdateColorStatus(frame, frame.filter)
 	end
 end
@@ -121,7 +122,7 @@ function Buff:PLAYER_REGEN_ENABLED()
 
 	if( self.frame ) then
 		self.frame.icon:SetAlpha(1.0)
-		self.frame:Show()
+		self.parent:Show()
 		
 		for _, frame in pairs(classFrames) do
 			frame.icon:SetAlpha(1.0)
@@ -774,7 +775,7 @@ function Buff:CreateSingleFrame(parent)
 	}
 
 	local frame = CreateFrame("Button", nil, parent or UIParent, "SecureActionButtonTemplate,SecureHandlerEnterLeaveTemplate")
-	frame:SetFrameStrata("HIGH")
+	frame:SetFrameStrata("LOW")
 	frame:SetHeight(32)
 	frame:SetWidth(65)
 	frame:SetBackdrop(self.backdrop)
@@ -918,43 +919,49 @@ function Buff:UpdateClassFrames()
 	end	
 	
 	-- Flag it as we haven't updated
-	for _, frame in pairs(classFrames) do frame.wasUpdated = nil end
+	for _, frame in pairs(classFrames) do frame.wasUpdated = nil frame.hasAssignment = nil end
 	
 	-- Now scan the group and create/update any frames if needed
-	for _, unit in pairs(groupRoster) do
+	for name, unit in pairs(groupRoster) do
 		local class, classToken = UnitClass(unit)
 		if( class and classToken ) then
-			local frame = classFrames[classToken]
-			if( not frame ) then
-				frame = self:CreateSingleFrame(self.parent)
-				frame.filter = classToken
-				
-				if( not PaladinBuffer.isStill30 and PaladinBuffer.db.profile.frame.popout ) then
-					frame.popout = {}
-					frame:SetAttribute("_onenter", [[ self:GetFrameRef("popout"):Show() ]])
+			if( not classFrames[classToken] or not classFrames[classToken].wasUpdated ) then
+				local frame = classFrames[classToken]
+				if( not frame ) then
+					frame = self:CreateSingleFrame(self.parent)
+					frame.filter = classToken
 
-					self:BuildPopoutBar(frame)
+					if( not PaladinBuffer.isStill30 and PaladinBuffer.db.profile.frame.popout ) then
+						frame.popout = {}
+						frame:SetAttribute("_onenter", [[ self:GetFrameRef("popout"):Show() ]])
+
+						self:BuildPopoutBar(frame)
+					end
+
+					local coords = CLASS_BUTTONS[classToken]
+					frame.icon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
+					frame.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+
+					classFrames[classToken] = frame
 				end
-				
-				local coords = CLASS_BUTTONS[classToken]
-				frame.icon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
-				frame.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-				
-				classFrames[classToken] = frame
-			end
-			
-			-- No parent was set yet, because it's supposed to only show the class frames, soo set the first frame as the parent
-			if( not self.parent ) then
-				self:SetParentFrame(frame)
+
+				-- No parent was set yet, because it's supposed to only show the class frames, soo set the first frame as the parent
+				if( not self.parent ) then
+					self:SetParentFrame(frame)
+				end
+
+				frame.wasUpdated = true
 			end
 
-			frame.wasUpdated = true
+			if( assignments[name] or assignments[classToken] ) then
+				classFrames[classToken].hasAssignment = true
+			end
 		end
 	end
 	
 	-- The frame wasn't updated this go around, so we can hide it as the class is gone
 	for _, frame in pairs(classFrames) do
-		if( not frame.wasUpdated ) then
+		if( not frame.wasUpdated or not frame.hasAssignment ) then
 			frame:Hide()
 		else
 			frame:Show()
@@ -1013,19 +1020,24 @@ function Buff:Reload()
 		elseif( self.parent.filter == "ALL" and not PaladinBuffer.db.profile.frame.enabled ) then
 			self.parent = nil
 			self.frame:Hide()
-			
-			self:UpdateClassFrames()
 		end
 		
 		-- Update parent scaling annd reposition
 		if( self.parent ) then
 			self.parent:SetScale(PaladinBuffer.db.profile.frame.scale)
 		end
-		
+				
+		self:UpdateClassFrames()
+
 		-- Update colors
 		self.frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
 		
 		for _, frame in pairs(classFrames) do
+			-- Disabled, so hide any ones we had
+			if( not PaladinBuffer.db.profile.frame.classes ) then
+				frame:Hide()
+			end
+			
 			frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
 		end
 		

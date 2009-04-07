@@ -1,20 +1,20 @@
 --- AceConfigDialog-3.0 generates AceGUI-3.0 based windows based on option tables.
 -- @class file
 -- @name AceConfigDialog-3.0
--- @release $Id: AceConfigDialog-3.0.lua 762 2009-04-02 14:58:04Z nevcairiel $
+-- @release $Id: AceConfigDialog-3.0.lua 789 2009-04-06 18:55:26Z nevcairiel $
 
 local LibStub = LibStub
-local MAJOR, MINOR = "AceConfigDialog-3.0", 29
-local lib = LibStub:NewLibrary(MAJOR, MINOR)
+local MAJOR, MINOR = "AceConfigDialog-3.0", 33
+local AceConfigDialog = LibStub:NewLibrary(MAJOR, MINOR)
 
-if not lib then return end
+if not AceConfigDialog then return end
 
-lib.OpenFrames = lib.OpenFrames or {}
-lib.Status = lib.Status or {}
-lib.frame = lib.frame or CreateFrame("Frame")
+AceConfigDialog.OpenFrames = AceConfigDialog.OpenFrames or {}
+AceConfigDialog.Status = AceConfigDialog.Status or {}
+AceConfigDialog.frame = AceConfigDialog.frame or CreateFrame("Frame")
 
-lib.frame.apps = lib.frame.apps or {}
-lib.frame.closing = lib.frame.closing or {}
+AceConfigDialog.frame.apps = AceConfigDialog.frame.apps or {}
+AceConfigDialog.frame.closing = AceConfigDialog.frame.closing or {}
 
 local gui = LibStub("AceGUI-3.0")
 local reg = LibStub("AceConfigRegistry-3.0")
@@ -179,6 +179,7 @@ local stringIsLiteral = {
 	usage = true,
 	width = true,
 	image = true,
+	fontSize = true,
 }
 
 --Is Never a function or method
@@ -422,10 +423,11 @@ local function CleanUserData(widget, event)
 	end
 end
 
---[[
-	Gets a status table for the given appname and options path
-]]
-function lib:GetStatusTable(appName, path)
+-- - Gets a status table for the given appname and options path.
+-- @param appName The application name as given to `:RegisterOptionsTable()`
+-- @param path The path to the options (a table with all group keys)
+-- @return 
+function AceConfigDialog:GetStatusTable(appName, path)
 	local status = self.Status
 
 	if not status[appName] then
@@ -451,10 +453,11 @@ function lib:GetStatusTable(appName, path)
 	return status.status
 end
 
---[[
-	Sets the given path to be selected
-]]
-function lib:SelectGroup(appName, ...)
+--- Selects the specified path in the options window.
+-- The path specified has to match the keys of the groups in the table.
+-- @param appName The application name as given to `:RegisterOptionsTable()`
+-- @param ... The path to the key that should be selected
+function AceConfigDialog:SelectGroup(appName, ...)
 	local path = new()
 
 	
@@ -575,14 +578,14 @@ local function confirmPopup(appName, rootframe, basepath, info, message, func, .
 		if dialog and oldstrata then
 			dialog:SetFrameStrata(oldstrata)
 		end
-		lib:Open(appName, rootframe, basepath and unpack(basepath))
+		AceConfigDialog:Open(appName, rootframe, basepath and unpack(basepath))
 		del(info)
 	end
 	t.OnCancel = function()
 		if dialog and oldstrata then
 			dialog:SetFrameStrata(oldstrata)
 		end
-		lib:Open(appName, rootframe, basepath and unpack(basepath))
+		AceConfigDialog:Open(appName, rootframe, basepath and unpack(basepath))
 		del(info)
 	end
 	for i = 1, select('#', ...) do
@@ -792,17 +795,17 @@ local function ActivateControl(widget, event, ...)
 			if event == "OnValueConfirmed" then
 				
 				if iscustom then
-					lib:Open(user.appName, user.rootframe, basepath and unpack(basepath))
+					AceConfigDialog:Open(user.appName, user.rootframe, basepath and unpack(basepath))
 				else
-					lib:Open(user.appName, basepath and unpack(basepath))
+					AceConfigDialog:Open(user.appName, basepath and unpack(basepath))
 				end
 			end
 		elseif option.type == "range" then
 			if event == "OnMouseUp" then
 				if iscustom then
-					lib:Open(user.appName, user.rootframe, basepath and unpack(basepath))
+					AceConfigDialog:Open(user.appName, user.rootframe, basepath and unpack(basepath))
 				else
-					lib:Open(user.appName, basepath and unpack(basepath))
+					AceConfigDialog:Open(user.appName, basepath and unpack(basepath))
 				end
 			end
 		--multiselects don't cause a refresh on 'OnValueChanged' only 'OnClosed'
@@ -810,9 +813,9 @@ local function ActivateControl(widget, event, ...)
 			user.valuechanged = true
 		else
 			if iscustom then
-				lib:Open(user.appName, user.rootframe, basepath and unpack(basepath))
+				AceConfigDialog:Open(user.appName, user.rootframe, basepath and unpack(basepath))
 			else
-				lib:Open(user.appName, basepath and unpack(basepath))
+				AceConfigDialog:Open(user.appName, basepath and unpack(basepath))
 			end
 		end
 
@@ -839,9 +842,9 @@ local function ActivateMultiControl(widget, event, ...)
 	local iscustom = user.rootframe:GetUserData('iscustom')
 	local basepath = user.rootframe:GetUserData('basepath')
 	if iscustom then
-		lib:Open(user.appName, user.rootframe, basepath and unpack(basepath))
+		AceConfigDialog:Open(user.appName, user.rootframe, basepath and unpack(basepath))
 	else
-		lib:Open(user.appName, basepath and unpack(basepath))
+		AceConfigDialog:Open(user.appName, basepath and unpack(basepath))
 	end
 end
 
@@ -851,16 +854,16 @@ local function MultiControlOnClosed(widget, event, ...)
 		local iscustom = user.rootframe:GetUserData('iscustom')
 		local basepath = user.rootframe:GetUserData('basepath')
 		if iscustom then
-			lib:Open(user.appName, user.rootframe, basepath and unpack(basepath))
+			AceConfigDialog:Open(user.appName, user.rootframe, basepath and unpack(basepath))
 		else
-			lib:Open(user.appName, basepath and unpack(basepath))
+			AceConfigDialog:Open(user.appName, basepath and unpack(basepath))
 		end
 	end
 end
 
 local function FrameOnClose(widget, event)
 	local appName = widget:GetUserData('appName')
-	lib.OpenFrames[appName] = nil
+	AceConfigDialog.OpenFrames[appName] = nil
 	gui:Release(widget)
 end
 
@@ -957,6 +960,7 @@ local function BuildSubGroups(group, tree, options, path, appName)
 				local entry = new()
 				entry.value = k
 				entry.text = GetOptionsMemberValue("name", v, options, path, appName)
+				entry.icon = GetOptionsMemberValue("icon", v, options, path, appName)
 				entry.disabled = CheckOptionDisabled(v, options, path, appName)
 				if not tree.children then tree.children = new() end
 				tinsert(tree.children,entry)
@@ -990,6 +994,7 @@ local function BuildGroups(group, options, path, appName, recurse)
 				local entry = new()
 				entry.value = k
 				entry.text = GetOptionsMemberValue("name", v, options, path, appName)
+				entry.icon = GetOptionsMemberValue("icon", v, options, path, appName)
 				entry.disabled = CheckOptionDisabled(v, options, path, appName)
 				tinsert(tree,entry)
 				if recurse and (v.childGroups or "tree") == "tree" then
@@ -1087,10 +1092,11 @@ local function FeedOptions(appName, options,container,rootframe,path,group,inlin
 							height = 32
 						end
 						control:SetImageSize(width, height)
+						control:SetLabel(name)
 					else
 						control = gui:Create("Button")
+						control:SetText(name)
 					end
-					control:SetText(name)
 					control:SetCallback("OnClick",ActivateControl)
 
 				elseif v.type == "input" then
@@ -1254,6 +1260,16 @@ local function FeedOptions(appName, options,container,rootframe,path,group,inlin
 				elseif v.type == "description" then
 					control = gui:Create("Label")
 					control:SetText(name)
+					
+					local fontSize = GetOptionsMemberValue("fontSize",v, options, path, appName)
+					if fontSize == "medium" then
+						control:SetFontObject(GameFontHighlight)
+					elseif fontSize == "large" then
+						control:SetFontObject(GameFontHighlightLarge)
+					else -- small or invalid
+						control:SetFontObject(GameFontHighlightSmall)
+					end
+					
 					local imageCoords = GetOptionsMemberValue("imageCoords",v, options, path, appName)
 					local image, width, height = GetOptionsMemberValue("image",v, options, path, appName)
 					
@@ -1413,7 +1429,7 @@ local function GroupSelected(widget, event, uniquevalue)
 		group = GetSubOption(group, feedpath[i])
 	end
 	widget:ReleaseChildren()
-	lib:FeedGroup(user.appName,options,widget,rootframe,feedpath)
+	AceConfigDialog:FeedGroup(user.appName,options,widget,rootframe,feedpath)
 
 	del(feedpath)
 end
@@ -1421,6 +1437,7 @@ end
 
 
 --[[
+-- INTERNAL --
 This function will feed one group, and any inline child groups into the given container
 Select Groups will only have the selection control (tree, tabs, dropdown) fed in
 and have a group selected, this event will trigger the feeding of child groups
@@ -1435,7 +1452,7 @@ Rules:
 		if its parent is a tree group, its already a node on a tree
 --]]
 
-function lib:FeedGroup(appName,options,container,rootframe,path, isRoot)
+function AceConfigDialog:FeedGroup(appName,options,container,rootframe,path, isRoot)
 	local group = options
 	--follow the path to get to the curent group
 	local inline
@@ -1461,14 +1478,14 @@ function lib:FeedGroup(appName,options,container,rootframe,path, isRoot)
 	--check if the group has child groups
 	local hasChildGroups
 	for k, v in pairs(group.args) do
-		if v.type == "group" and not pickfirstset(v.dialogInline,v.guiInline,v.inline, false) then
+		if v.type == "group" and not pickfirstset(v.dialogInline,v.guiInline,v.inline, false) and not pickfirstset(v.dialogHidden,v.guiHidden,v.hidden, false) then
 			hasChildGroups = true
 		end
 	end
 	if group.plugins then
 		for plugin, t in pairs(group.plugins) do
 			for k, v in pairs(t) do
-				if v.type == "group" and not pickfirstset(v.dialogInline,v.guiInline,v.inline, false) then
+				if v.type == "group" and not pickfirstset(v.dialogInline,v.guiInline,v.inline, false) and not pickfirstset(v.dialogHidden,v.guiHidden,v.hidden, false) then
 					hasChildGroups = true
 				end
 			end
@@ -1512,7 +1529,7 @@ function lib:FeedGroup(appName,options,container,rootframe,path, isRoot)
 			tab:SetCallback("OnTabEnter", TreeOnButtonEnter)
 			tab:SetCallback("OnTabLeave", TreeOnButtonLeave)
 			
-			local status = lib:GetStatusTable(appName, path)
+			local status = AceConfigDialog:GetStatusTable(appName, path)
 			if not status.groups then
 				status.groups = {}
 			end
@@ -1539,7 +1556,7 @@ function lib:FeedGroup(appName,options,container,rootframe,path, isRoot)
 			local select = gui:Create("DropdownGroup")
 			InjectInfo(select, options, group, path, rootframe, appName)
 			select:SetCallback("OnGroupSelected", GroupSelected)
-			local status = lib:GetStatusTable(appName, path)
+			local status = AceConfigDialog:GetStatusTable(appName, path)
 			if not status.groups then
 				status.groups = {}
 			end
@@ -1577,7 +1594,7 @@ function lib:FeedGroup(appName,options,container,rootframe,path, isRoot)
 			tree:SetCallback("OnButtonEnter", TreeOnButtonEnter)
 			tree:SetCallback("OnButtonLeave", TreeOnButtonLeave)
 			
-			local status = lib:GetStatusTable(appName, path)
+			local status = AceConfigDialog:GetStatusTable(appName, path)
 			if not status.groups then
 				status.groups = {}
 			end
@@ -1605,11 +1622,11 @@ local old_CloseSpecialWindows
 
 local function RefreshOnUpdate(this)
 	for appName in pairs(this.closing) do
-		if lib.OpenFrames[appName] then
-			lib.OpenFrames[appName]:Hide()
+		if AceConfigDialog.OpenFrames[appName] then
+			AceConfigDialog.OpenFrames[appName]:Hide()
 		end
-		if lib.BlizOptions and lib.BlizOptions[appName] then
-			local widget = lib.BlizOptions[appName]
+		if AceConfigDialog.BlizOptions and AceConfigDialog.BlizOptions[appName] then
+			local widget = AceConfigDialog.BlizOptions[appName]
 			if not widget:IsVisible() then
 				widget:ReleaseChildren()
 			end
@@ -1618,22 +1635,22 @@ local function RefreshOnUpdate(this)
 	end
 	
 	if this.closeAll then
-		for k, v in pairs(lib.OpenFrames) do
+		for k, v in pairs(AceConfigDialog.OpenFrames) do
 			v:Hide()
 		end
 		this.closeAll = nil
 	end
 	
 	for appName in pairs(this.apps) do
-		if lib.OpenFrames[appName] then
-			local user = lib.OpenFrames[appName]:GetUserDataTable()
-			lib:Open(appName, user.basepath and unpack(user.basepath))
+		if AceConfigDialog.OpenFrames[appName] then
+			local user = AceConfigDialog.OpenFrames[appName]:GetUserDataTable()
+			AceConfigDialog:Open(appName, user.basepath and unpack(user.basepath))
 		end
-		if lib.BlizOptions and lib.BlizOptions[appName] then
-			local widget = lib.BlizOptions[appName]
+		if AceConfigDialog.BlizOptions and AceConfigDialog.BlizOptions[appName] then
+			local widget = AceConfigDialog.BlizOptions[appName]
 			local user = widget:GetUserDataTable()
 			if widget:IsVisible() then
-				lib:Open(widget:GetUserData('appName'), widget, user.basepath and unpack(user.basepath))
+				AceConfigDialog:Open(widget:GetUserData('appName'), widget, user.basepath and unpack(user.basepath))
 			end
 		end
 		this.apps[appName] = nil
@@ -1641,39 +1658,53 @@ local function RefreshOnUpdate(this)
 	this:SetScript("OnUpdate", nil)
 end
 
-function lib:CloseAll()
-	lib.frame.closeAll = true
-	lib.frame:SetScript("OnUpdate", RefreshOnUpdate)
+--- Close all open options windows
+function AceConfigDialog:CloseAll()
+	AceConfigDialog.frame.closeAll = true
+	AceConfigDialog.frame:SetScript("OnUpdate", RefreshOnUpdate)
 	if next(self.OpenFrames) then
 		return true
 	end
 end
 
-function lib:Close(appName)
+--- Close a specific options window.
+-- @param appName The application name as given to `:RegisterOptionsTable()`
+function AceConfigDialog:Close(appName)
 	if self.OpenFrames[appName] then
-		lib.frame.closing[appName] = true
-		lib.frame:SetScript("OnUpdate", RefreshOnUpdate)
+		AceConfigDialog.frame.closing[appName] = true
+		AceConfigDialog.frame:SetScript("OnUpdate", RefreshOnUpdate)
 		return true
 	end
 end
 
-function lib:ConfigTableChanged(event, appName)
-	lib.frame.apps[appName] = true
-	lib.frame:SetScript("OnUpdate", RefreshOnUpdate)
+-- Internal -- Called by AceConfigRegistry
+function AceConfigDialog:ConfigTableChanged(event, appName)
+	AceConfigDialog.frame.apps[appName] = true
+	AceConfigDialog.frame:SetScript("OnUpdate", RefreshOnUpdate)
 end
 
-reg.RegisterCallback(lib, "ConfigTableChange", "ConfigTableChanged")
+reg.RegisterCallback(AceConfigDialog, "ConfigTableChange", "ConfigTableChanged")
 
-function lib:SetDefaultSize(appName, width, height)
-	local status = lib:GetStatusTable(appName)
+--- Sets the default size of the options window for a specific application.
+-- @param appName The application name as given to `:RegisterOptionsTable()`
+-- @param width The default width
+-- @param height The default height
+function AceConfigDialog:SetDefaultSize(appName, width, height)
+	local status = AceConfigDialog:GetStatusTable(appName)
 	if type(width) == "number" and type(height) == "number" then
 		status.width = width
 		status.height = height
 	end
 end
 
--- :Open(appName, [container], [path ...])
-function lib:Open(appName, container, ...)
+--- Open an option window at the specified path (if any).
+-- This function can optionally feed the group into a pre-created container
+-- instead of creating a new container frame.
+-- @paramsig appName [, container][, ...]
+-- @param appName The application name as given to `:RegisterOptionsTable()`
+-- @param container An optional container frame to feed the options into
+-- @param ... The path to open after creating the options window (see `:SelectGroup` for details)
+function AceConfigDialog:Open(appName, container, ...)
 	if not old_CloseSpecialWindows then
 		old_CloseSpecialWindows = CloseSpecialWindows
 		CloseSpecialWindows = function()
@@ -1711,7 +1742,7 @@ function lib:Open(appName, container, ...)
 		if #path > 0 then
 			f:SetUserData('basepath', copy(path))
 		end
-		local status = lib:GetStatusTable(appName)
+		local status = AceConfigDialog:GetStatusTable(appName)
 		if not status.width then
 			status.width =  700
 		end
@@ -1735,7 +1766,7 @@ function lib:Open(appName, container, ...)
 			f:SetUserData('basepath', copy(path))
 		end
 		f:SetTitle(name or "")
-		local status = lib:GetStatusTable(appName)
+		local status = AceConfigDialog:GetStatusTable(appName)
 		f:SetStatusTable(status)
 	end
 
@@ -1746,21 +1777,38 @@ function lib:Open(appName, container, ...)
 	del(path)
 end
 
-lib.BlizOptions = lib.BlizOptions or {}
+AceConfigDialog.BlizOptions = AceConfigDialog.BlizOptions or {}
 
 local function FeedToBlizPanel(widget, event)
 	local path = widget:GetUserData('path')
-	lib:Open(widget:GetUserData('appName'), widget, path and unpack(path))
+	AceConfigDialog:Open(widget:GetUserData('appName'), widget, path and unpack(path))
 end
 
 local function ClearBlizPanel(widget, event)
 	local appName = widget:GetUserData('appName')
-	lib.frame.closing[appName] = true
-	lib.frame:SetScript("OnUpdate", RefreshOnUpdate)
+	AceConfigDialog.frame.closing[appName] = true
+	AceConfigDialog.frame:SetScript("OnUpdate", RefreshOnUpdate)
 end
 
-function lib:AddToBlizOptions(appName, name, parent, ...)
-	local BlizOptions = lib.BlizOptions
+--- Add an option table into the Blizzard Interface Options panel.
+-- You can optionally supply a descriptive name to use and a parent frame to use,
+-- as well as a path in the options table.\\
+-- If no name is specified, the appName will be used instead.
+--
+-- If you specify a proper `parent` (by name), the interface options will generate a
+-- tree layout. Note that only one level of children is supported, so the parent always
+-- has to be a head-level note.
+--
+-- This function returns a reference to the container frame registered with the Interface
+-- Options. You can use this reference to open the options with the API function
+-- `InterfaceOptionsFrame_OpenToCategory`.
+-- @param appName The application name as given to `:RegisterOptionsTable()`
+-- @param name A descriptive name to display in the options tree (defaults to appName)
+-- @param parent The parent to use in the interface options tree.
+-- @param ... The path in the options table to feed into the interface options panel.
+-- @return The reference to the frame registered into the Interface Options. 
+function AceConfigDialog:AddToBlizOptions(appName, name, parent, ...)
+	local BlizOptions = AceConfigDialog.BlizOptions
 	
 	local key = appName
 	for n = 1, select('#', ...) do

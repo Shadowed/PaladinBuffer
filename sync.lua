@@ -225,12 +225,16 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 			
 	-- Reset + Assign, this implies that any data not present is there because they aren't assigned it
 	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
-		self:ParsePlayerAssignments(true, string.split(";", arg))
+		if( not PaladinBuffer.modules.AssignGUI.assignmentsLocked ) then
+			self:ParsePlayerAssignments(true, string.split(";", arg))
+		end
 		
 	-- Assign, this implies that the data is partially sent, meaning it might be multiple ASSIGNs to get all of them done
 	-- I'm using RASSIGN for this, ASSIGN is "just in case"
 	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
-		self:ParsePlayerAssignments(false, string.split(";", arg))
+		if( not PaladinBuffer.modules.AssignGUI.assignmentsLocked ) then
+			self:ParsePlayerAssignments(false, string.split(";", arg))
+		end
 		
 	-- We got this persons assignments
 	elseif( cmd == "MYDATA" and arg and playerName ~= sender ) then
@@ -243,10 +247,12 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 			-- It's implied that if the information wasn't sent in this that they aren't assigned to it
 			-- we basically trade a trivial amount of CPU (resetting two tables) for less comm data sent through the addon channels
 			PaladinBuffer:ResetBlessingData(sender)
-			PaladinBuffer:ClearAssignments(sender)
-			
 			self:ParseTalents(sender, string.split(":", talents))
-			self:ParseAssignments(sender, string.split(":", assignments))
+			
+			if( not PaladinBuffer.modules.AssignGUI.assignmentsLocked ) then
+				PaladinBuffer:ClearAssignments(sender)
+				self:ParseAssignments(sender, string.split(":", assignments))
+			end
 		end
 	
 	-- Leadership required?
@@ -254,16 +260,9 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 		freeAssign[sender] = (leaderRequired == "true") and false or true
 		self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
 	
-	-- Requesting symbol totals
-	elseif( cmd == "SYMREQUEST" and arg and PaladinBuffer:HasPermission(sender) ) then
-		self:SendAddonMessage(string.format("SYMBOLS: %d", GetItemCount("item:21177")))
-	
 	-- Clear assignments from people
 	elseif( cmd == "CLEAR" and PaladinBuffer:HasPermission(sender) ) then
 		PaladinBuffer:ClearAllAssignments()
-		
-	-- Symbol total received
-	--elseif( cmd == "SYMBOLS" ) then
 	end
 end
 

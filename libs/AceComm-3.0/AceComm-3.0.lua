@@ -2,14 +2,14 @@
 -- It'll automatically split the messages into multiple parts and rebuild them on the receiving end.\\
 -- **ChatThrottleLib** is of course being used to avoid being disconnected by the server.
 --
--- AceComm-3.0 can be embeded into your addon, either explicitly by calling AceComm:Embed(MyAddon) or by 
+-- **AceComm-3.0** can be embeded into your addon, either explicitly by calling AceComm:Embed(MyAddon) or by 
 -- specifying it as an embeded library in your AceAddon. All functions will be available on your addon object
 -- and can be accessed directly, without having to explicitly call AceComm itself.\\
 -- It is recommended to embed AceComm, otherwise you'll have to specify a custom `self` on all calls you
 -- make into AceComm.
 -- @class file
 -- @name AceComm-3.0
--- @release $Id: AceComm-3.0.lua 765 2009-04-03 19:14:41Z nevcairiel $
+-- @release $Id: AceComm-3.0.lua 766 2009-04-04 08:26:05Z nevcairiel $
 
 --[[ AceComm-3.0
 

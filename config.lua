@@ -93,7 +93,12 @@ local function loadOptions()
 						type = "toggle",
 						name = L["Enable Pally Power support"],
 						desc = L["Allows you to both send and receive assignments from Pally Power users."],
-						width = "full",
+					},
+					autoLock = {
+						order = 0.10,
+						type = "toggle",
+						name = L["Auto lock changes"],
+						desc = L["When you change assignments, your changes will become locked so other people changing them does not change yours locally."],
 					},
 					requireLeader = {
 						order = 0.25,
