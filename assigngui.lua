@@ -135,7 +135,7 @@ function Assign:UpdateAssignmentButtons(rowID)
 	local assignData = PaladinBuffer.db.profile.assignments[row.playerName]
 	
 	for _, columns in pairs(self.assignColumns) do
-		local assignColumn = assignColumn = columns[rowID]
+		local assignColumn = columns[rowID]
 		if( assignColumn and assignData ) then
 			assignColumn:Show()
 			
