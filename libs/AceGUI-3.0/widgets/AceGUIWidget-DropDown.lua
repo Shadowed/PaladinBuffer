@@ -1,4 +1,4 @@
---[[ $Id: AceGUIWidget-DropDown.lua 679 2008-09-06 12:51:18Z nargiddley $ ]]--
+--[[ $Id: AceGUIWidget-DropDown.lua 793 2009-04-07 09:26:44Z nevcairiel $ ]]--
 local min, max, floor = math.min, math.max, math.floor
 
 local AceGUI = LibStub("AceGUI-3.0")
@@ -344,7 +344,7 @@ end
 
 do 
 	local widgetType = "Dropdown"
-	local widgetVersion = 18
+	local widgetVersion = 19
 	
 	--[[ Static data ]]--
 	
@@ -444,6 +444,9 @@ do
 		pullout:SetCallback("OnOpen", OnPulloutOpen)
 		self.pullout.frame:SetFrameLevel(self.frame:GetFrameLevel() + 1)
 		fixlevels(self.pullout.frame, self.pullout.frame:GetChildren())
+		
+		self:SetHeight(44)
+		self:SetWidth(200)
 	end
 	
 	-- exported, AceGUI callback

@@ -36,7 +36,7 @@
 -- end
 -- @class file
 -- @name AceDB-3.0.lua
--- @release $Id: AceDB-3.0.lua 788 2009-04-06 10:15:46Z nevcairiel $
+-- @release $Id: AceDB-3.0.lua 799 2009-04-09 05:00:05Z kaelten $
 local ACEDB_MAJOR, ACEDB_MINOR = "AceDB-3.0", 13
 local AceDB, oldminor = LibStub:NewLibrary(ACEDB_MAJOR, ACEDB_MINOR)
 
@@ -619,6 +619,7 @@ function DBObjectLib:GetNamespace(name, silent)
 	if not silent and not (self.children and self.children[name]) then
 		error ("Usage: AceDBObject:GetNamespace(name): 'name' - namespace does not exist.", 2)
 	end
+	if not self.children then self.children = {} end
 	return self.children[name]
 end
 

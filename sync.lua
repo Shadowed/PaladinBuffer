@@ -2,7 +2,7 @@ if( not PaladinBuffer ) then return end
 
 local Sync = PaladinBuffer:NewModule("Sync", "AceEvent-3.0", "AceComm-3.0")
 local classList, timerFrame, freeAssign
-local supportsPP, requestThrottle = {}, {}
+local ignorePP, requestThrottle = {}, {}
 local playerName = UnitName("player")
 local THROTTLE_TIME = 5
 
@@ -19,6 +19,14 @@ function Sync:OnDisable()
 	self:UnregisterAllComm()
 end
 
+function Sync:Lock()
+	self.lockChanges = true
+end
+
+function Sync:Unlock()
+	self.lockChanges = false
+end
+
 function Sync:SendAssignmentReset()
 	self:SendAddonMessage("CLEAR")
 	
@@ -29,7 +37,7 @@ end
 
 function Sync:RequestData()
 	-- Request data from PaladinBuffer users
-	self:SendAddonMessage("REQUEST: " .. tostring(PaladinBuffer.db.profile.ppSupport))
+	self:SendAddonMessage("REQUEST")
 	
 	-- Request data from Pally Power users
 	-- will do a small 0.5 delay so that PB users will see that they should ignore any syncs that are sent as compats
@@ -205,18 +213,13 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	
 	-- Request our assignment data
 	if( cmd == "REQUEST" ) then
-		-- We already got a request from this person, and it's still throttled
-		if( requestThrottle[sender] and requestThrottle[sender] >= GetTime() ) then
-			return
+		if( not requestThrottle[sender] or GetTime() > requestThrottle[sender] ) then
+			requestThrottle[sender] = GetTime() + THROTTLE_TIME
+			-- We should ignore any PP syncs from this user, as they have PB
+			ignorePP[sender] = true
+
+			self:SendPersonalAssignment()
 		end
-		
-		requestThrottle[sender] = GetTime() + THROTTLE_TIME
-		
-		-- This lets us know that the person has Pally Power support on, so any of there comms using Pally Power data
-		-- should be ignored, as they will be sending data in our real format as well
-		supportsPP[sender] = arg == "true"
-		
-		self:SendPersonalAssignment()
 	
 	-- Blessing data
 	elseif( cmd == "BLESSINGS" ) then
@@ -224,12 +227,12 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 		self:ParseTalents(sender, string.split(":", arg))
 			
 	-- Reset + Assign, this implies that any data not present is there because they aren't assigned it
-	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		self:ParsePlayerAssignments(true, string.split(";", arg))
 		
 	-- Assign, this implies that the data is partially sent, meaning it might be multiple ASSIGNs to get all of them done
 	-- I'm using RASSIGN for this, ASSIGN is "just in case"
-	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		self:ParsePlayerAssignments(false, string.split(";", arg))
 		
 	-- We got this persons assignments
@@ -245,8 +248,10 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 			PaladinBuffer:ResetBlessingData(sender)
 			self:ParseTalents(sender, string.split(":", talents))
 			
-			PaladinBuffer:ClearAssignments(sender)
-			self:ParseAssignments(sender, string.split(":", assignments))
+			if( not self.lockChanges ) then
+				PaladinBuffer:ClearAssignments(sender)
+				self:ParseAssignments(sender, string.split(":", assignments))
+			end
 		end
 	
 	-- Leadership required?
@@ -255,7 +260,7 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 		self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
 	
 	-- Clear assignments from people
-	elseif( cmd == "CLEAR" and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "CLEAR" and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		PaladinBuffer:ClearAllAssignments()
 	end
 end
@@ -426,7 +431,7 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 	]]
 	
 	-- Make sure we want this message
-	if( prefix ~= "PLPWR" or sender == playerName or not PaladinBuffer.db.profile.ppSupport or supportsPP[sender] or ( type ~= "PARTY" and type ~= "RAID" ) ) then
+	if( prefix ~= "PLPWR" or sender == playerName or not PaladinBuffer.db.profile.ppSupport or ignorePP[sender] or ( type ~= "PARTY" and type ~= "RAID" ) ) then
 		return
 	end
 	
@@ -440,16 +445,14 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 	-- Request our data
 	if( cmd == "REQ" ) then
 		-- We already got a request from this person, and it's still throttled
-		if( requestThrottle[sender] and requestThrottle[sender] >= GetTime() ) then
-			return
+		if( not requestThrottle[sender] or GetTime() > requestThrottle[sender] ) then
+			requestThrottle[sender] = GetTime() + THROTTLE_TIME
+
+			self:SendPPData()
 		end
 		
-		requestThrottle[sender] = GetTime() + THROTTLE_TIME
-
-		self:SendPPData()
-		
 	-- Someone was assigned a specific spell to a specific class
-	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		local name, classID, spellID = string.split(" ", arg)
 		classID = tonumber(string.trim(classID))
 		spellID = tonumber(string.trim(spellID)) or "n"
@@ -459,7 +462,7 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 		end
 		
 	-- Someone was assigned to a single blessing
-	elseif( cmd == "NASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "NASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		local casterName, _, target, spellID = string.split(" ", arg)
 		spellID = tonumber(string.trim(spellID)) or "n"
 		
@@ -468,14 +471,12 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 		end
 		
 	-- Someone was assigned to the same blessing on every class
-	elseif( cmd == "MASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
+	elseif( cmd == "MASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		local name, spellID = string.split(" ", arg)
 		spellID = tonumber(string.trim(spellID)) or "n"
 		
 		if( name ) then
-			for classToken in pairs(classList) do
-				PaladinBuffer:AssignBlessing(name, greaterConversions[spellID], classToken)
-			end
+			PaladinBuffer:MassAssignBlessing(name, greaterConversions[spellID])
 		end
 	
 	-- We got data on someones assignments, make sure they are a Paladin thought, why the fuck would I care about there own assignments
@@ -493,6 +494,10 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 			self:ParsePPBlessingData(sender, "sanct", "gsanct", tonumber(sanctRank), tonumber(sanctImproved))
 			
 			-- Parse assignments
+			if( self.lockChanges ) then
+				return
+			end
+			
 			assignments = string.trim(assignments)
 			
 			local offset = 0

@@ -5,9 +5,12 @@ local AceGUI = LibStub("AceGUI-3.0")
 --------------------------
 do
 	local Type = "Button"
-	local Version = 7
+	local Version = 10
 	
 	local function OnAcquire(self)
+		-- restore default values
+		self:SetHeight(24)
+		self:SetWidth(200)
 	end
 	
 	local function OnRelease(self)
@@ -44,16 +47,32 @@ do
 	
 	local function Constructor()
 		local num  = AceGUI:GetNextWidgetNum(Type)
-		local frame = CreateFrame("Button","AceGUI30Button"..num,UIParent,"UIPanelButtonTemplate2")
+		local name = "AceGUI30Button"..num
+		local frame = CreateFrame("Button",name,UIParent,"UIPanelButtonTemplate2")
 		local self = {}
 		self.num = num
 		self.type = Type
 		self.frame = frame
+		
+		local left = _G[name .. "Left"]
+		local right = _G[name .. "Right"]
+		local middle = _G[name .. "Middle"]
+		
+		left:SetPoint("TOP", frame, "TOP", 0, -1)
+		left:SetPoint("BOTTOM", frame, "BOTTOM", 0, 1)
+		
+		right:SetPoint("TOP", frame, "TOP", 0, -1)
+		right:SetPoint("BOTTOM", frame, "BOTTOM", 0, 1)
+		
+		middle:SetPoint("TOP", frame, "TOP", 0, -1)
+		middle:SetPoint("BOTTOM", frame, "BOTTOM", 0, 1)
 
 		local text = frame:GetFontString()
 		self.text = text
-		text:SetPoint("LEFT",frame,"LEFT",15,0)
-		text:SetPoint("RIGHT",frame,"RIGHT",-15,0)
+		text:ClearAllPoints()
+		text:SetPoint("TOPLEFT",frame,"TOPLEFT", 15, -1)
+		text:SetPoint("BOTTOMRIGHT",frame,"BOTTOMRIGHT", -15, 1)
+		text:SetJustifyV("MIDDLE")
 
 		frame:SetScript("OnClick",Button_OnClick)
 		frame:SetScript("OnEnter",Button_OnEnter)

@@ -3,14 +3,12 @@
 -- as well as associate it with a slash command.
 -- @class file
 -- @name AceConfig-3.0
--- @release $Id: AceConfig-3.0.lua 769 2009-04-04 11:05:08Z nevcairiel $
+-- @release $Id: AceConfig-3.0.lua 802 2009-04-11 12:12:37Z nevcairiel $
 
 --[[
 AceConfig-3.0
 
 Very light wrapper library that combines all the AceConfig subcomponents into one more easily used whole.
-
-Also automatically adds "config", "enable" and "disable" commands to options table as appropriate.
 
 ]]
 

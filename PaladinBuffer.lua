@@ -10,6 +10,7 @@ local raidUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData, f
 local improved = {[GetSpellInfo(20244)] = {"wisdom", "gwisdom"}, [GetSpellInfo(20042)] = {"might", "gmight"}}
 local blessingTypes = {["gmight"] = "greater", ["gwisdom"] = "greater", ["gkings"] = "greater", ["gsanct"] = "greater", ["might"] = "single", ["wisdom"] = "single", ["kings"] = "single", ["sanct"] = "single"}
 local blessings = {["might"] = GetSpellInfo(56520), ["gmight"] = GetSpellInfo(48934), ["wisdom"] = GetSpellInfo(56521), ["gwisdom"] = GetSpellInfo(48938), ["sanct"] = GetSpellInfo(20911), ["gsanct"] = GetSpellInfo(25899), ["kings"] = GetSpellInfo(20217), ["gkings"] = GetSpellInfo(25898)}
+local blacklist = {["WARRIOR"] = "gwisdom", ["ROGUE"] = "gwisdom", ["PRIEST"] = "gmight", ["MAGE"] = "gmight", ["DEATHKNIGHT"] = "gwisdom"}
 local instanceType
 
 function PaladinBuffer:OnInitialize()
@@ -80,6 +81,7 @@ function PaladinBuffer:OnInitialize()
 	self.partyUnits = partyUnits
 	self.groupRoster = groupRoster
 	self.freeAssign = freeAssign
+	self.blacklist = blacklist
 	
 	-- Save a list of unitids
 	for i=1, MAX_RAID_MEMBERS do
@@ -154,6 +156,35 @@ function PaladinBuffer:AssignBlessing(caster, spellToken, assignment)
 	self:SendMessage("PB_ASSIGNED_BLESSINGS", caster, assignment, spellToken)
 end
 
+-- Mass assign everyone to this
+function PaladinBuffer:MassAssignBlessing(caster, spellToken)
+	setupPlayerData(caster)
+	
+	-- Assign the player to doing the blessing on everyone in this class as long as it's not blacklisted
+	for classToken in pairs(classList) do
+		if( not blacklist[classToken] or blacklist[classToken] ~= spellToken ) then
+			self.db.profile.assignments[caster][classToken] = spellToken
+		end
+	end
+	
+	-- Now check if someone else is already doing one of these blessings, if so unassign them
+	if( spellToken ) then
+		for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
+			if( name ~= caster ) then
+				for classToken, token in pairs(assignments) do
+					if( token == spellToken ) then
+						assignments[classToken] = nil
+						self:SendMessage("PB_ASSIGNED_BLESSINGS", name, classToken, spellToken)
+					end
+				end
+			end
+		end
+	end
+	
+	-- Trigger event now
+	self:SendMessage("PB_ASSIGNED_BLESSINGS", caster, "ALL", spellToken)
+	
+end
 -- Reset the talent data we have for them
 function PaladinBuffer:ResetBlessingData(caster)
 	if( self.db.profile.blessings[caster] ) then

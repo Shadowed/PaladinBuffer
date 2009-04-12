@@ -3,19 +3,21 @@ if( not PaladinBuffer ) then return end
 local Assign = PaladinBuffer:NewModule("AssignGUI", "AceEvent-3.0")
 local L = PaladinBufferLocals
 
-local playerName = UnitName("player")
-local groupList, displayList, classTotals, singleBlessings, blessingIcons, blessings, blessingOrder, singleBlacklist, blacklisted, classes
 local MAX_GROUP_ROWS = 14
 local ROW_HEIGHT = 17
 
-function Assign:CreateTables()
-	classes = {"WARRIOR","ROGUE","PRIEST","DRUID","PALADIN","HUNTER","MAGE","WARLOCK","SHAMAN", "DEATHKNIGHT"}
-	blacklisted = {["WARRIOR"] = "gwisdom", ["ROGUE"] = "gwisdom", ["PRIEST"] = "gmight", ["MAGE"] = "gmight", ["DEATHKNIGHT"] = "gwisdom"}
-	singleBlacklist = {["WARRIOR"] = "wisdom", ["ROGUE"] = "wisdom", ["PRIEST"] = "might", ["MAGE"] = "might", ["DEATHKNIGHT"] = "wisdom"}
-	blessingOrder = {["gmight"] = 1, ["gwisdom"] = 2, ["gkings"] = 3, ["gsanct"] = 4}
-	blessings = {"gmight", "gwisdom", "gkings", "gsanct"}
-	singleBlessings = {"might", "wisdom", "kings", "sanct"}
-	blessingIcons = {["gmight"] = select(3, GetSpellInfo(48934)), ["gwisdom"] = select(3, GetSpellInfo(48938)), ["gsanct"] = select(3, GetSpellInfo(25899)),["gkings"] = select(3, GetSpellInfo(25898)), ["might"] = select(3, GetSpellInfo(56520)), ["wisdom"] = select(3, GetSpellInfo(56521)), ["sanct"] = select(3, GetSpellInfo(20911)), ["kings"] = select(3, GetSpellInfo(20217))}
+local groupList, displayList, classTotals, blacklist
+local classes = {"WARRIOR","ROGUE","PRIEST","DRUID","PALADIN","HUNTER","MAGE","WARLOCK","SHAMAN", "DEATHKNIGHT"}
+local singleBlacklist = {["WARRIOR"] = "wisdom", ["ROGUE"] = "wisdom", ["PRIEST"] = "might", ["MAGE"] = "might", ["DEATHKNIGHT"] = "wisdom"}
+local blessingOrder = {["gmight"] = 1, ["gwisdom"] = 2, ["gkings"] = 3, ["gsanct"] = 4}
+local blessings = {"gmight", "gwisdom", "gkings", "gsanct"}
+local singleBlessings = {"might", "wisdom", "kings", "sanct"}
+local blessingIcons = {["gmight"] = select(3, GetSpellInfo(48934)), ["gwisdom"] = select(3, GetSpellInfo(48938)), ["gsanct"] = select(3, GetSpellInfo(25899)),["gkings"] = select(3, GetSpellInfo(25898)), ["might"] = select(3, GetSpellInfo(56520)), ["wisdom"] = select(3, GetSpellInfo(56521)), ["sanct"] = select(3, GetSpellInfo(20911)), ["kings"] = select(3, GetSpellInfo(20217))}
+
+local playerName = UnitName("player")
+
+function Assign:OnInitialize()
+	blacklist = PaladinBuffer.blacklist
 end
 
 -- Message fired so we should update the visible blessings
@@ -64,47 +66,52 @@ local function assignBlessing(self)
 		spellToken = nil
 	end
 			
-	if( IsShiftKeyDown() ) then
-		for _, classToken in pairs(classes) do
-			if( blacklisted[classToken] ~= spellToken ) then
-				PaladinBuffer:AssignBlessing(self.playerName, spellToken, classToken)
-			end
-		end
-	else
+	if( not IsShiftKeyDown() ) then
 		PaladinBuffer:AssignBlessing(self.playerName, spellToken, self.classToken)
+	else
+		PaladinBuffer:MassAssignBlessing(self.playerName, spellToken)
+	end
+
+	-- Stop others changing the assignments from messing ours up
+	if( PaladinBuffer.db.profile.autoLock ) then
+		Assign:LockAssignments()
 	end
 end
 
 -- Assignment buttons for each class
 function Assign:CreateAssignmentButtons(rowID)
-	local row = self.rows[rowID]
+	-- Now create there rows in the class columns for assignments
 	local ICON_SIZE = 18
-	for id, classToken in pairs(classes) do
-		local button = CreateFrame("Frame", nil, row)
-		button:SetHeight(ICON_SIZE * 2)
-		button:SetWidth(ICON_SIZE * 2)
-		button.icons = {}
+	for columnID, column in pairs(self.columns) do
+		if( not self.assignColumns[columnID] ) then
+			self.assignColumns[columnID] = {}
+		end
 
-		row.assign[id] = button
+		local assignColumn = CreateFrame("Frame", nil, column)
+		assignColumn:SetHeight(ICON_SIZE * 2)
+		assignColumn:SetWidth(ICON_SIZE * 2)
+		assignColumn.icons = {}
 
-		if( id > 1 ) then
-			button:SetPoint("TOPLEFT", row.assign[id - 1], "TOPRIGHT", 20, 0)
+		self.assignColumns[columnID][rowID] = assignColumn
+
+		if( rowID > 1 ) then
+			assignColumn:SetPoint("BOTTOMLEFT", self.assignColumns[columnID][rowID - 1], "BOTTOMLEFT", 0, -60)
 		else
-			button:SetPoint("TOPLEFT", row.text, "TOPLEFT", 124, -6)
+			assignColumn:SetPoint("BOTTOMLEFT", column, "BOTTOMLEFT", -4, -60)
 		end
 
 		-- Now create the icons in the counter frame
 		for iconID, spellToken in pairs(blessings) do
-			local icon = CreateFrame("Button", nil, button)
+			local icon = CreateFrame("Button", nil, assignColumn)
 			icon:SetHeight(ICON_SIZE)
 			icon:SetWidth(ICON_SIZE)
 			icon:SetNormalTexture(blessingIcons[spellToken])
 			icon:SetScript("OnClick", assignBlessing)
 			icon:RegisterForClicks("AnyUp")
 			icon.spellToken = spellToken
-			icon.classToken = classToken
+			icon.classToken = column.classToken
 
-			button.icons[iconID] = icon
+			assignColumn.icons[iconID] = icon
 		end
 	end
 end
@@ -127,21 +134,22 @@ function Assign:UpdateAssignmentButtons(rowID)
 	local blessingData = PaladinBuffer.db.profile.blessings[row.playerName]
 	local assignData = PaladinBuffer.db.profile.assignments[row.playerName]
 	
-	for rowID, assignButtons in pairs(row.assign) do
-		if( assignData ) then
-			assignButtons:Show()
-
-			for _, icon in pairs(assignButtons.icons) do
-				if( blessingData[icon.spellToken] and blacklisted[icon.classToken] ~= icon.spellToken ) then
+	for _, columns in pairs(self.assignColumns) do
+		local assignColumn = assignColumn = columns[rowID]
+		if( assignColumn and assignData ) then
+			assignColumn:Show()
+			
+			for _, icon in pairs(assignColumn.icons) do
+				if( blessingData[icon.spellToken] and blacklist[icon.classToken] ~= icon.spellToken ) then
 					SetDesaturation(icon:GetNormalTexture(), nil)
-
+					
 					-- Show their assignments, but don't allow them to be changed
 					if( row.playerName == playerName or PaladinBuffer.freeAssign[row.playerName] or PaladinBuffer:HasPermission(playerName) ) then
 						icon:EnableMouse(true)
 					else
 						icon:EnableMouse(false)
 					end
-
+					
 					icon:SetAlpha(assignData[icon.classToken] ~= icon.spellToken and 0.40 or 1.0)
 					icon.playerName = row.playerName
 					icon.disabled = nil
@@ -157,22 +165,22 @@ function Assign:UpdateAssignmentButtons(rowID)
 			end
 
 			-- Sort so that disabled are last
-			table.sort(assignButtons.icons, sortBlessingIcons)
+			table.sort(assignColumn.icons, sortBlessingIcons)
 
 			-- And reposition
-			for iconID, icon in pairs(assignButtons.icons) do
+			for iconID, icon in pairs(assignColumn.icons) do
 				if( iconID == 3 ) then
-					icon:SetPoint("TOPLEFT", assignButtons.icons[1], "BOTTOMLEFT", 0, -2)
+					icon:SetPoint("TOPLEFT", assignColumn.icons[1], "BOTTOMLEFT", 0, -2)
 				elseif( iconID > 1 ) then
-					icon:SetPoint("TOPLEFT", assignButtons.icons[iconID - 1], "TOPRIGHT", 2, 0)
+					icon:SetPoint("TOPLEFT", assignColumn.icons[iconID - 1], "TOPRIGHT", 2, 0)
 				else
-					icon:SetPoint("TOPLEFT", assignButtons, "TOPLEFT")
+					icon:SetPoint("TOPLEFT", assignColumn, "TOPLEFT")
 				end
 			end
 
 		-- No more assignments for this person, so hide everything associated
-		else
-			assignButtons:Hide()
+		elseif( assignColumn ) then
+			assignColumn:Hide()
 		end
 	end
 end
@@ -228,12 +236,12 @@ function Assign:UpdateBlessingInfo(rowID)
 
 	-- Now position blessings
 	if( row.blessings[2] and row.blessings[2]:IsVisible() ) then
-		row.blessings[2]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 60, -5)
+		row.blessings[2]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 60, -6)
 		row.blessings[2]:Show()
 	end
 	
 	if( row.blessings[1] and row.blessings[1]:IsVisible()) then
-		row.blessings[1]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -5)
+		row.blessings[1]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -6)
 		row.blessings[1]:Show()
 	end
 
@@ -254,9 +262,8 @@ local function sortPlayers(a, b)
 end
 
 function Assign:UpdatePlayerRows()
-	-- Reset row names
-	for _, row in pairs(self.rows) do row.playerName = "ZZ" end
-	
+	-- Reset set name
+	for _, row in pairs(self.rows) do row.playerName = "ZZZ" end
 	
 	-- Create each users row
 	local rowID = 0
@@ -270,7 +277,6 @@ function Assign:UpdatePlayerRows()
 			row:SetHeight(10)
 			row:SetWidth(50)
 			row.blessings = {}
-			row.assign = {}
 			row.playerName = ""
 
 			row.text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -280,7 +286,7 @@ function Assign:UpdatePlayerRows()
 			row.grid:SetBackdrop(self.gridBackdrop)
 			row.grid:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
 			row.grid:SetBackdropBorderColor(0.75, 0.75, 0.75, 1.0)
-			row.grid:SetHeight(57)
+			row.grid:SetHeight(61)
 			row.grid:SetWidth(self.frame:GetWidth())
 
 			self.rows[rowID] = row
@@ -309,21 +315,25 @@ function Assign:UpdatePlayerRows()
 		if( id <= rowID ) then
 			if( id > 1 ) then
 				row.grid:SetPoint("TOPLEFT", self.rows[id - 1].grid, "BOTTOMLEFT", 0, 1)
-				row:SetPoint("TOPLEFT", self.rows[id - 1], "BOTTOMLEFT", 0, -45)
+				row:SetPoint("TOPLEFT", self.rows[id - 1], "BOTTOMLEFT", 0, -50)
 			else
 				row.grid:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -48)
-				row:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 4, -52)
+				row:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 4, -54)
 			end
-						
+			
 			self:UpdateBlessingInfo(id)
 			self:UpdateAssignmentButtons(id)
 		else
+			for _, columns in pairs(self.assignColumns) do
+				columns[id]:Hide()
+			end
+			
 			row:Hide()
 		end
 	end
 	
 	-- Update frame height
-	self.frame:SetHeight(60 + (rowID * 51))
+	self.frame:SetHeight(49 + (rowID * 60))
 	
 	-- Now update the column grids height
 	for _, column in pairs(self.columns) do
@@ -400,10 +410,12 @@ end
 
 -- No longer need events for this
 local function OnHide(self)
-	Assign:UnregisterAllMessages()
+	self = Assign
+	self:UnregisterAllMessages()
+	self:UnlockAssignments()
 	
-	if( Assign.singleFrame ) then
-		Assign.choiceFrame:Hide()
+	if( self.singleFrame ) then
+		self.choiceFrame:Hide()
 	end
 end
 
@@ -411,12 +423,16 @@ end
 local function quickAssignBlessings()
 	PaladinBuffer.modules.Assign:CalculateBlessings()
 	PaladinBuffer.modules.Sync:SendAssignments()
+
+	Assign:LockAssignments()
 end
 
 -- Reset everything
 local function clearAllBlessings()
 	PaladinBuffer:ClearAllAssignments()
 	PaladinBuffer.modules.Sync:SendAssignmentReset()
+
+	Assign:UnlockAssignments()
 end
 
 -- Refresh blessing data
@@ -435,11 +451,14 @@ local function refreshBlessingData(self)
 	self:SetScript("OnUpdate", throttleUpdate)
 	
 	PaladinBuffer.modules.Sync:RequestData()
+
+	Assign:UnlockAssignments()
 end
 
 -- Push blessings to the group
 local function pushBlessings()
 	PaladinBuffer.modules.Sync:SendAssignments()
+	Assign:UnlockAssignments()
 end
 
 -- Show the single blessing UI
@@ -471,9 +490,6 @@ function Assign:CreateFrame()
 		return
 	end
 	
-	-- Ceaste our tables for holding things!
-	self:CreateTables()
-	
 	self.backdrop = {bgFile = "Interface\\CharacterFrame\\UI-Party-Background",
 			edgeFile = "Interface\\ChatFrame\\ChatFrameBackground",
 			tile = false,
@@ -494,7 +510,7 @@ function Assign:CreateFrame()
 	self.frame = CreateFrame("Frame", "PaladinBufferFrame", UIParent)
 	self.frame:SetFrameStrata("MEDIUM")
 	self.frame:SetHeight(65)
-	self.frame:SetWidth(681)
+	self.frame:SetWidth(669)
 	self.frame:SetBackdrop(self.backdrop)
 	self.frame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
 	self.frame:SetBackdropBorderColor(0.75, 0.75, 0.75, 0.90)
@@ -519,7 +535,7 @@ function Assign:CreateFrame()
 	local button = CreateFrame("Button", nil, self.titleFrame, "UIPanelCloseButton")
 	button:SetHeight(30)
 	button:SetWidth(30)
-	button:SetPoint("TOPRIGHT", 6, 6)
+	button:SetPoint("TOPRIGHT", 5, 5)
 	button:SetScript("OnClick", function()
 		HideUIPanel(Assign.frame)
 	end)
@@ -562,12 +578,35 @@ function Assign:CreateFrame()
 	push:SetNormalFontObject(GameFontHighlightSmall)
 	push:SetHighlightFontObject(GameFontHighlightSmall)
 	push:SetHeight(18)
-	push:SetWidth(113)
-	push:SetText(L["Push assignments"])
+	push:SetWidth(55)
+	push:SetText(L["Push"])
+	push:SetScript("OnEnter", showTooltip)
+	push:SetScript("OnLeave", hideTooltip)
 	push:SetScript("OnClick", pushBlessings)
-	push:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 4, -4)
+	push:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 3, -4)
+	push.tooltip = L["Push blessing assignments for Paladins."]
 	
 	self.frame.push = push
+
+	local lock = CreateFrame("Button", nil, self.frame, "UIPanelButtonGrayTemplate")
+	lock:SetNormalFontObject(GameFontHighlightSmall)
+	lock:SetHighlightFontObject(GameFontHighlightSmall)
+	lock:SetHeight(18)
+	lock:SetWidth(55)
+	lock:SetText(L["Lock"])
+	lock:SetScript("OnEnter", showTooltip)
+	lock:SetScript("OnLeave", hideTooltip)
+	lock:SetScript("OnClick", function()
+		if( Assign.assignmentsLocked ) then
+			Assign:UnlockAssignments()
+		else
+			Assign:LockAssignments()
+		end
+	end)
+	lock:SetPoint("TOPLEFT", push, "TOPRIGHT", 2, 0)
+	lock.tooltip = L["Ignores all changes to assignments made by other people until you manually uncheck this, push assignments, clear or manually refresh them."]
+	
+	self.frame.lock = lock
 
 	local resetAll = CreateFrame("Button", nil, self.frame, "UIPanelButtonGrayTemplate")
 	resetAll:SetNormalFontObject(GameFontHighlightSmall)
@@ -643,19 +682,20 @@ function Assign:CreateFrame()
 		column.grid:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
 		column.grid:SetBackdropBorderColor(0.75, 0.75, 0.75, 1.0)
 		column.grid:SetHeight(self.frame:GetHeight())
-		column.grid:SetWidth(57)
+		column.grid:SetWidth(56)
 		
 		if( id > 1 ) then
 			column.grid:SetPoint("TOPLEFT", self.columns[id - 1].grid, "TOPRIGHT", -1, 0)
-			column:SetPoint("TOPLEFT", self.columns[id - 1], "TOPRIGHT", 26, 0)   
+			column:SetPoint("TOPLEFT", self.columns[id - 1], "TOPRIGHT", 25, 0)   
 		else
-			column.grid:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 120, 0)
-			column:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 132, -8)
+			column.grid:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 118, 0)
+			column:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 130, -6)
 		end
 
 		self.columns[id] = column 
 	end
 
+	self.assignColumns = {}
 	self.rows = {}
 end
 
@@ -892,6 +932,26 @@ local function setSingleAssigner(self)
 	end
 end
 
+function Assign:LockAssignments()
+	self.assignmentsLocked = true
+	
+	if( self.frame and self.frame.lock ) then
+		self.frame.lock:SetText(L["Unlock"])
+	end
+
+	PaladinBuffer.modules.Sync:Lock()
+end
+
+function Assign:UnlockAssignments()
+	self.assignmentsLocked = false
+
+	if( self.frame and self.frame.lock ) then
+		self.frame.lock:SetText(L["Lock"])
+	end
+
+	PaladinBuffer.modules.Sync:Unlock()
+end
+
 -- Create the single assignment UI
 function Assign:CreateSingleFrame()
 	if( self.singleFrame ) then
@@ -910,7 +970,7 @@ function Assign:CreateSingleFrame()
 	self.choiceFrame:SetBackdrop(self.backdrop)
 	self.choiceFrame:SetBackdropColor(0.0, 0.0, 0.0, 1.0)
 	self.choiceFrame:SetBackdropBorderColor(0.90, 0.90, 0.90, 0.95)
-	self.choiceFrame:SetPoint("TOPLEFT", self.frame.push, "TOPRIGHT", 3, 10)
+	self.choiceFrame:SetPoint("TOPLEFT", self.frame.push, "TOPRIGHT", 60, 4)
 	self.choiceFrame:Hide()
 	self.choiceFrame:SetScript("OnShow", function()
 		Assign:UpdateChoiceList()	
