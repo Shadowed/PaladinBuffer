@@ -27,10 +27,7 @@ PaladinBufferLocals = {
 	
 	-- Configuration
 	["General"] = "General",
-	
-	["Auto lock changes"] = "Auto lock changes",
-	["When you change assignments, your changes will become locked so other people changing them does not change yours locally."] = "When you change assignments, your changes will become locked so other people changing them does not change yours locally.",
-	
+		
 	["Border color"] = "Border color",
 	["Background color"] = "Background color",
 	["Can rebuff color"] = "Can rebuff color",
@@ -113,11 +110,7 @@ PaladinBufferLocals = {
 	-- GUI
 	["None"] = "None",
 	["Quick assign"] = "Quick assign",
-	["Push"] = "Push",
-	["Lock"] = "Lock",
-	["Unlock"] = "Unlock",
-	["Push blessing assignments for Paladins."] = "Push blessing assignments for Paladins.",
-	["Ignores all changes to assignments made by other people until you manually uncheck this, push assignments, clear or manually refresh them."] = "Ignores all changes to assignments made by other people until you manually uncheck this, push assignments, clear or manually refresh them.",	
+	["Push assignments"] = "Push assignments",
 	
 	["Single assignments"] = "Single assignments",
 	["Clear"] = "Clear",

@@ -18,7 +18,6 @@ function PaladinBuffer:OnInitialize()
 			ppSupport = true,
 			requireLeader = false,
 			offline = false,
-			autoLock = false,
 			greaterbinding = "CTRL-1",
 			singleBinding = "CTRL-2",
 			scale = 1.0,

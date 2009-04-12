@@ -225,16 +225,12 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 			
 	-- Reset + Assign, this implies that any data not present is there because they aren't assigned it
 	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
-		if( not PaladinBuffer.modules.AssignGUI.assignmentsLocked ) then
-			self:ParsePlayerAssignments(true, string.split(";", arg))
-		end
+		self:ParsePlayerAssignments(true, string.split(";", arg))
 		
 	-- Assign, this implies that the data is partially sent, meaning it might be multiple ASSIGNs to get all of them done
 	-- I'm using RASSIGN for this, ASSIGN is "just in case"
 	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) ) then
-		if( not PaladinBuffer.modules.AssignGUI.assignmentsLocked ) then
-			self:ParsePlayerAssignments(false, string.split(";", arg))
-		end
+		self:ParsePlayerAssignments(false, string.split(";", arg))
 		
 	-- We got this persons assignments
 	elseif( cmd == "MYDATA" and arg and playerName ~= sender ) then
@@ -249,10 +245,8 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 			PaladinBuffer:ResetBlessingData(sender)
 			self:ParseTalents(sender, string.split(":", talents))
 			
-			if( not PaladinBuffer.modules.AssignGUI.assignmentsLocked ) then
-				PaladinBuffer:ClearAssignments(sender)
-				self:ParseAssignments(sender, string.split(":", assignments))
-			end
+			PaladinBuffer:ClearAssignments(sender)
+			self:ParseAssignments(sender, string.split(":", assignments))
 		end
 	
 	-- Leadership required?
