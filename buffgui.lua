@@ -45,10 +45,6 @@ function Buff:Disable()
 	end
 end
 
-function Buff:Reload()
-	self:UpdateClassFrames()
-end
-
 function Buff:UpdateFrame()
 	if( not self.frame or not self.parent:IsVisible() ) then
 		return
@@ -162,11 +158,6 @@ function Buff:UpdateColorStatus(frame, filter)
 				else
 					hasGreaterOOR = true
 				end
-
-				-- Someone isn't visible, so out of range ( :( )
-				--if( not UnitIsVisible(unit) ) then
-				--	hasGreaterOOR = true
-				--end
 
 				-- Find the lowest buff time + does someone have a buff missing
 				local buffTime = greaterTimes[name]
@@ -309,13 +300,8 @@ function Buff:FindLowestTime(classFilter, blessingName)
 		local classToken = select(2, UnitClass(unit))
 		if( classToken == classFilter and ( PaladinBuffer.db.profile.offline or UnitIsConnected(unit) ) and not assignments[name] ) then
 			classTotal = classTotal + 1
-									
-			-- Blessings are done using visible range, so if they are within 100 yards, we can bless them
-			--if( UnitIsVisible(unit) and not UnitIsDeadOrGhost(unit) ) then
-			--	visibleRange = visibleRange + 1
-			--end
 			
-			-- However! We need an initial target, so we have to make sure at least one person is within range of us
+			-- We need an initial target, so we have to make sure at least one person is within range of us
 			if( IsSpellInRange(blessingName, unit) == 1 and not UnitIsDeadOrGhost(unit) ) then
 				visibleRange = visibleRange + 1
 				inSpellRange = unit
@@ -581,7 +567,7 @@ end
 
 local function popoutOnShow(self)
 	-- Owner name
-	local name = UnitName(self.unit)
+	local name = (UnitName(self.unit)) or UNKNOWN
 	self.name:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[self.classToken].r, 255 * RAID_CLASS_COLORS[self.classToken].g, 255 * RAID_CLASS_COLORS[self.classToken].b, name)
 	self.playerName = name
 
@@ -644,6 +630,7 @@ end
 
 function Buff:CreatePopoutFrame(parent)
 	local frame = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate,SecureHandlerShowHideTemplate")
+	frame:SetClampedToScreen(true)
 	frame:SetFrameStrata("MEDIUM")
 	frame:SetHeight(28)
 	frame:SetWidth(65)
@@ -669,13 +656,12 @@ function Buff:CreatePopoutFrame(parent)
 	return frame
 end
 
-local PER_COLUMN = 4
 function Buff:BuildPopoutBar(parent)
 	for _, frame in pairs(parent.popout) do frame:Hide() end
 	
-	local onShow, onHide = "self:RegisterAutoHide(1) \n self:AddToAutoHide(self:GetFrameRef('parent'))", ""
-	local used, inColumn = 0, 0
-	local lastColumn
+	local onShow, onHide = "self:RegisterAutoHide(0.25) \n self:AddToAutoHide(self:GetFrameRef('parent'))", ""
+	local newPop = true
+	local used = 0
 	
 	-- Create the group thingys
 	for name, unit in pairs(groupRoster) do
@@ -688,32 +674,13 @@ function Buff:BuildPopoutBar(parent)
 				table.insert(parent.popout, popFrame)
 
 				parent.popout[1]:SetFrameRef("btn" .. used, popFrame)
+				
+				newPop = true
 			end
 			
 			popFrame.unit = unit
 			popFrame.classToken = classToken
-									
-			-- Position
-			if( used > 1 ) then
-				if( inColumn == PER_COLUMN ) then
-					popFrame:ClearAllPoints()
-					popFrame:SetPoint("TOPRIGHT", lastColumn, "BOTTOMRIGHT", 0, 0)
 
-					lastColumn = popFrame
-					inColumn = 0
-				else
-					popFrame:ClearAllPoints()
-					popFrame:SetPoint("TOPRIGHT", parent.popout[used - 1], "TOPLEFT", -2, 0)
-				end
-			else
-				lastColumn = popFrame
-
-				popFrame:ClearAllPoints()
-				popFrame:SetPoint("TOPRIGHT", parent, "TOPLEFT", -2, -1)
-			end
-
-			inColumn = inColumn + 1
-						
 			onShow = onShow .. "\n self:GetFrameRef('btn" .. used .. "'):Show() \n self:AddToAutoHide(self:GetFrameRef('btn" .. used .. "'))"
 			onHide = onHide .. "\n self:GetFrameRef('btn" .. used .. "'):Hide()"
 		end
@@ -725,6 +692,91 @@ function Buff:BuildPopoutBar(parent)
 		parent.popout[1]:SetFrameRef("parent", parent)
 		parent.popout[1]:SetAttribute("_onshow", onShow)
 		parent.popout[1]:SetAttribute("_onhide", onHide)
+	end
+	
+	-- Reposition if a new one was added
+	if( newPop ) then
+		self:PositionPopoutBar(parent)
+	end
+end
+
+function Buff:PositionPopoutBar(parent)
+	local inColumn = 0
+	local lastColumn
+
+	for id, popFrame in pairs(parent.popout) do
+		-- Ugly, going to clean this up later.
+		-- Position frame to the left
+		if( PaladinBuffer.db.profile.frame.popDirection == "LEFT" ) then
+			if( id > 1 ) then
+				-- Every 4 frames, do a new column
+				if( inColumn == 4 ) then
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint("TOPRIGHT", lastColumn, "BOTTOMRIGHT", 0, -2)
+
+					lastColumn = popFrame
+					inColumn = 0
+				else
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint("TOPRIGHT", parent.popout[id - 1], "TOPLEFT", -2, 0)
+				end
+			else
+				lastColumn = popFrame
+
+				popFrame:ClearAllPoints()
+				popFrame:SetPoint("TOPRIGHT", parent, "TOPLEFT", -2, -1)
+			end
+		-- Position it to the right
+		elseif( PaladinBuffer.db.profile.frame.popDirection == "RIGHT" ) then
+			if( id > 1 ) then
+				-- Every 4 frames do a new column
+				if( inColumn == 4 ) then
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint("BOTTOMRIGHT", lastColumn, "TOPRIGHT", 0, 2)
+
+					lastColumn = popFrame
+					inColumn = 0
+				else
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint("TOPLEFT", parent.popout[id - 1], "TOPRIGHT", 2, 0)
+				end
+			else
+				lastColumn = popFrame
+
+				popFrame:ClearAllPoints()
+				popFrame:SetPoint("TOPLEFT", parent, "TOPRIGHT", 2, -2)
+			end			
+		-- Position it up or down
+		elseif( PaladinBuffer.db.profile.frame.popDirection == "UP" or PaladinBuffer.db.profile.frame.popDirection == "DOWN" ) then
+			local point, relativeTo, mainOffset, secondOffset = "BOTTOM", "TOP", 3, 2
+			if( PaladinBuffer.db.profile.frame.popDirection == "DOWN" ) then
+				point = "TOP"
+				relativeTo = "BOTTOM"
+				mainOffset = -3
+				secondOffset = -2
+			end
+		
+			if( id > 1 ) then
+				-- Every 2 frames, do a new column
+				if( inColumn == 2 ) then
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint(point, lastColumn, relativeTo, 0, secondOffset)
+
+					lastColumn = popFrame
+					inColumn = 0
+				else
+					popFrame:ClearAllPoints()
+					popFrame:SetPoint("TOPRIGHT", parent.popout[id - 1], "TOPLEFT", -2, 0)
+				end
+			else
+				lastColumn = popFrame
+
+				popFrame:ClearAllPoints()
+				popFrame:SetPoint(point, parent, relativeTo, 0, mainOffset)
+			end
+		end
+
+		inColumn = inColumn + 1
 	end
 end
 
@@ -775,6 +827,7 @@ function Buff:CreateSingleFrame(parent)
 	}
 
 	local frame = CreateFrame("Button", nil, parent or UIParent, "SecureActionButtonTemplate,SecureHandlerEnterLeaveTemplate")
+	frame:SetClampedToScreen(true)
 	frame:SetFrameStrata("LOW")
 	frame:SetHeight(32)
 	frame:SetWidth(65)
@@ -931,13 +984,11 @@ function Buff:UpdateClassFrames()
 					frame = self:CreateSingleFrame(self.parent)
 					frame.filter = classToken
 
-					if( not PaladinBuffer.isStill30 and PaladinBuffer.db.profile.frame.popout ) then
+					if( PaladinBuffer.db.profile.frame.popout ) then
 						frame.popout = {}
-						frame:SetAttribute("_onenter", [[ self:GetFrameRef("popout"):Show() ]])
-
-						self:BuildPopoutBar(frame)
+						frame:SetAttribute("_onenter", [[ print("_onenter") self:GetFrameRef("popout"):Show() ]])
 					end
-
+	
 					local coords = CLASS_BUTTONS[classToken]
 					frame.icon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
 					frame.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
@@ -948,6 +999,11 @@ function Buff:UpdateClassFrames()
 				-- No parent was set yet, because it's supposed to only show the class frames, soo set the first frame as the parent
 				if( not self.parent ) then
 					self:SetParentFrame(frame)
+				end
+				
+				-- Update the pop out bar content
+				if( PaladinBuffer.db.profile.frame.popout ) then
+					self:BuildPopoutBar(frame)
 				end
 
 				frame.wasUpdated = true
@@ -1016,22 +1072,17 @@ function Buff:Reload()
 		if( self.parent.filter ~= "ALL" and PaladinBuffer.db.profile.frame.enabled ) then
 			self:ResetParentFrame(self.parent)
 			self:SetParentFrame(self.frame)
+
+			self.parent:SetScale(PaladinBuffer.db.profile.frame.scale)
+
 		-- Current parent is the overall frame, but it shouldn't be
 		elseif( self.parent.filter == "ALL" and not PaladinBuffer.db.profile.frame.enabled ) then
 			self.parent = nil
 			self.frame:Hide()
 		end
-		
-		-- Update parent scaling annd reposition
-		if( self.parent ) then
-			self.parent:SetScale(PaladinBuffer.db.profile.frame.scale)
-		end
 				
 		self:UpdateClassFrames()
 
-		-- Update colors
-		self.frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
-		
 		for _, frame in pairs(classFrames) do
 			-- Disabled, so hide any ones we had
 			if( not PaladinBuffer.db.profile.frame.classes ) then
@@ -1039,9 +1090,27 @@ function Buff:Reload()
 			end
 			
 			frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
+			
+			-- Deal with the pop out frame
+			if( PaladinBuffer.db.profile.frame.popout and not frame.popout ) then
+				frame.popout = {}
+				frame:SetAttribute("_onenter", [[ self:GetFrameRef("popout"):Show() ]])
+				
+				self:BuildPopoutBar(frame)
+			-- Disable it
+			elseif( not PaladinBuffer.db.profile.frame.popout and frame.popout ) then
+				frame:SetAttribute("_onenter", nil)
+			-- Reposition it
+			elseif( frame.popout ) then
+				frame:SetAttribute("_onenter", [[ self:GetFrameRef("popout"):Show() ]])
+				self:PositionPopoutBar(frame)
+			end
 		end
 		
 		self:PositionClassFrames()
+
+		-- Update colors
+		self.frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
 	end
 end
 

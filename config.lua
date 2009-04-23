@@ -178,14 +178,6 @@ local function loadOptions()
 						type = "toggle",
 						name = L["Locked"],
 						desc = L["You can move the buff frame by ALT + dragging the smart buff frame window while the frame is unlocked."],
-						width = "full",
-					},
-					popout = {
-						order = 0.5,
-						type = "toggle",
-						name = L["Enable pop out bar"],
-						desc = L["Allows you to individually buff players and see there buff status by mousing over there class in the buff frame."],
-						hidden = function() return PaladinBuffer.isStill30 end,
 					},
 					outOfGroup = {
 						order = 0.5,
@@ -214,6 +206,18 @@ local function loadOptions()
 						type = "toggle",
 						name = L["Hide in combat"],
 						desc = L["Hides the entire buff frame while you are in combat."],
+					},
+					popout = {
+						order = 4.5,
+						type = "toggle",
+						name = L["Enable pop out bar"],
+						desc = L["Allows you to individually buff players and see there buff status by mousing over there class in the buff frame."],
+					},
+					popDirection = {
+						order = 4.75,
+						type = "select",
+						name = L["Popout growth"],
+						values = {["LEFT"] = L["Left"], ["RIGHT"] = L["Right"], ["UP"] = L["Up"], ["DOWN"] = L["Down"]},
 					},
 					scale = {
 						order = 5,

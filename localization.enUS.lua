@@ -73,6 +73,12 @@ PaladinBufferLocals = {
 	["Raid instances"] = "Raid instances",
 	["Party instances"] = "Party instances",
 	
+	["Popout growth"] = "Popout growth",
+	["Left"] = "Left",
+	["Right"] = "Right",
+	["Up"] = "Up",
+	["Down"] = "Down",
+	
 	["Buff frame"] = "Buff frame",
 	
 	["Columns"] = "Columns",

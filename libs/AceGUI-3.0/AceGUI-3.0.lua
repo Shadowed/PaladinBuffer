@@ -24,8 +24,8 @@
 -- f:AddChild(btn)
 -- @class file
 -- @name AceGUI-3.0
--- @release $Id: AceGUI-3.0.lua 798 2009-04-07 21:48:35Z nevcairiel $
-local ACEGUI_MAJOR, ACEGUI_MINOR = "AceGUI-3.0", 22
+-- @release $Id: AceGUI-3.0.lua 803 2009-04-14 12:37:54Z nevcairiel $
+local ACEGUI_MAJOR, ACEGUI_MINOR = "AceGUI-3.0", 23
 local AceGUI, oldminor = LibStub:NewLibrary(ACEGUI_MAJOR, ACEGUI_MINOR)
 
 if not AceGUI then return end -- No upgrade needed
@@ -450,6 +450,16 @@ do
 		end
 		child:SetParent(self)
 		child.frame:Show()
+		self:DoLayout()
+	end
+	
+	WidgetContainerBase.AddChildren = function(self, ...)
+		for i = 1, select("#", ...) do
+			local child = select(i, ...)
+			tinsert(self.children, child)
+			child:SetParent(self)
+			child.frame:Show()
+		end
 		self:DoLayout()
 	end
 	

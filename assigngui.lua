@@ -868,6 +868,7 @@ function Assign:UpdateSingle()
 						blessing:EnableMouse(true)
 						blessing:SetAlpha(0.40)
 						blessing.playerName = groupData.name
+						blessing.playerClass = groupData.class
 						
 						if( self.choiceFrame.selectedName ) then
 							if( PaladinBuffer.db.profile.assignments[self.choiceFrame.selectedName][groupData.name] == blessing.spellToken ) then
@@ -911,12 +912,22 @@ end
 local function assignSingleBlessing(self)
 	-- Find who is the best for this
 	local caster = Assign.choiceFrame.selectedName or PaladinBuffer.modules.Assign:FindSingleBlesser(self.spellToken)
+	local spellToken = self.spellToken
+	
+	-- Already assigned, unassign
 	if( PaladinBuffer.db.profile.assignments[caster][self.playerName] == self.spellToken ) then
-		PaladinBuffer:AssignBlessing(caster, nil, self.playerName)
-		return
+		spellToken = nil
 	end
 	
-	PaladinBuffer:AssignBlessing(caster, self.spellToken, self.playerName)
+	if( not IsShiftKeyDown() ) then
+		PaladinBuffer:AssignBlessing(caster, spellToken, self.playerName)
+	else
+		for _, groupData in pairs(groupList) do
+			if( groupData.type == "PLAYER" and groupData.class == self.playerClass ) then
+				PaladinBuffer:AssignBlessing(caster, spellToken, groupData.name)
+			end
+		end
+	end
 end
 
 -- Set a single player to assign this set of blessings
@@ -1002,7 +1013,7 @@ function Assign:CreateSingleFrame()
 			button:SetWidth(16)
 			button.spellToken = spellToken
 
-			button.count = button:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+			button.count = button:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 			button.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT")
 
 			if( bID > 1 ) then

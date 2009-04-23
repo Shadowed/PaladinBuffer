@@ -38,6 +38,7 @@ function PaladinBuffer:OnInitialize()
 				growUp = false,
 				scale = 1.0,
 				columns = 1,
+				popDirection = "LEFT",
 				border = {r = 0.75, g = 0.75, b = 0.75},
 				background = {r = 0, g = 0, b = 0},
 				needRebuff = {r = 0.70, g = 0.10, b = 0.10},
@@ -90,12 +91,6 @@ function PaladinBuffer:OnInitialize()
 	
 	for i=1, MAX_PARTY_MEMBERS do
 		partyUnits[i] = "party" .. i
-	end
-	
-	-- Kings is still talented, so add the talent name as an improvement
-	if( select(4, GetBuildInfo()) <= 30000 ) then
-		improved[GetSpellInfo(59295)] = {"kings", "gkings"}
-		self.isStill30 = true
 	end
 end
 
@@ -321,7 +316,7 @@ function PaladinBuffer:ScanGroup()
 			groupRoster[name] = partyUnits[i]
 		end
 	end
-	
+		
 	-- Remove data if the person left the raid
 	for name in pairs(PaladinBuffer.db.profile.blessings) do
 		if( not groupRoster[name] and name ~= playerName ) then
