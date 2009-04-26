@@ -986,7 +986,7 @@ function Buff:UpdateClassFrames()
 
 					if( PaladinBuffer.db.profile.frame.popout ) then
 						frame.popout = {}
-						frame:SetAttribute("_onenter", [[ print("_onenter") self:GetFrameRef("popout"):Show() ]])
+						frame:SetAttribute("_onenter", [[ self:GetFrameRef("popout"):Show() ]])
 					end
 	
 					local coords = CLASS_BUTTONS[classToken]
