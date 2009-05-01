@@ -109,16 +109,13 @@ end
 function Buff:PLAYER_REGEN_ENABLED()
 	inCombat = nil
 	
-	if( updateQueued ) then
+	if( updateQueued or ( self.frame and PaladinBuffer.db.profile.frame.hideInCombat ) ) then
 		updateQueued = nil
-		self:UpdateClassFrames()
-	elseif( self.frame and PaladinBuffer.db.profile.frame.hideInCombat ) then
 		self:UpdateClassFrames()
 	end
 
-	if( self.frame ) then
+	if( self.frame and self.frame:IsVisible() ) then
 		self.frame.icon:SetAlpha(1.0)
-		self.parent:Show()
 		
 		for _, frame in pairs(classFrames) do
 			frame.icon:SetAlpha(1.0)
