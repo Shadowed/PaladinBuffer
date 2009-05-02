@@ -244,7 +244,7 @@ function PaladinBuffer:ScanSpells()
 	for spellToken, spellName in pairs(blessings) do
 		local rank = select(2, GetSpellInfo(spellName))
 		if( rank ) then
-			rank = rank == "" and 1 or tonumber(string.match(rank, L["Rank ([0-9]+)"]))
+			rank = rank == "" and 1 or tonumber(string.match(rank, "(%d+)"))
 			self.db.profile.blessings[playerName][spellToken] = rank
 			self.foundSpells = true
 		else
