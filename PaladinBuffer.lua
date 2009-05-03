@@ -252,6 +252,17 @@ function PaladinBuffer:ScanSpells()
 		end
 	end
 	
+	-- Check and make sure the player can still cast a buff on there assignment
+	local fullUpdate
+	for assignedTo, token in pairs(self.db.profile.assignments[playerName]) do
+		if( not self.db.profile.blessings[playerName][token] ) then
+			self.db.profile.assignments[playerName][assignedTo] = nil
+			self:SendMessage("PB_ASSIGNED_BLESSINGS", playerName, assignedTo)
+
+			sendUpdate = true
+		end
+	end
+	
 	-- Now scan talents for improvements
 	for tree=1, MAX_TALENT_TABS do
 		for talent=1, GetNumTalents(tree) do
@@ -273,7 +284,11 @@ function PaladinBuffer:ScanSpells()
 	
 	-- Send updated blessing update
 	if( not self.isLoggingIn and ( GetNumRaidMembers() > 0 or GetNumPartyMembers() > 0 ) ) then
-		self.modules.Sync:SendBlessingData()
+		if( fullUpdate ) then
+				self.modules.Sync:SendAssignments()
+		else
+				self.modules.Sync:SendBlessingData()
+		end
 	end
 	
 	self:SendMessage("PB_SPELLS_SCANNED")
