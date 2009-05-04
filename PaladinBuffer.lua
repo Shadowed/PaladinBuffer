@@ -6,7 +6,8 @@ PaladinBuffer = LibStub("AceAddon-3.0"):NewAddon("PaladinBuffer", "AceEvent-3.0"
 
 local L = PaladinBufferLocals
 local playerName = UnitName("player")
-local raidUnits, petUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData, freeAssign = {}, {}, {}, {}, {}, {}, {}, {}
+local playerGUID
+local raidUnits, petUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData, freeAssign, guidMap = {}, {}, {}, {}, {}, {}, {}, {}, {}
 local improved = {[GetSpellInfo(20244)] = {"wisdom", "gwisdom"}, [GetSpellInfo(20042)] = {"might", "gmight"}}
 local blessingTypes = {["gmight"] = "greater", ["gwisdom"] = "greater", ["gkings"] = "greater", ["gsanct"] = "greater", ["might"] = "single", ["wisdom"] = "single", ["kings"] = "single", ["sanct"] = "single"}
 local blessings = {["might"] = GetSpellInfo(56520), ["gmight"] = GetSpellInfo(48934), ["wisdom"] = GetSpellInfo(56521), ["gwisdom"] = GetSpellInfo(48938), ["sanct"] = GetSpellInfo(20911), ["gsanct"] = GetSpellInfo(25899), ["kings"] = GetSpellInfo(20217), ["gkings"] = GetSpellInfo(25898)}
@@ -93,6 +94,7 @@ function PaladinBuffer:OnInitialize()
 	self.freeAssign = freeAssign
 	self.blacklist = blacklist
 	self.petUnits = petUnits
+	self.guidMap = guidMap
 end
 
 -- Only call events if the mod is enabled
@@ -251,7 +253,7 @@ function PaladinBuffer:ResetAllAssignments()
 			self.db.profile.blessings[name] = nil
 		end
 	end
-
+	
 	self:SendMessage("PB_ASSIGNMENTS_UPDATED")
 end
 
@@ -324,9 +326,21 @@ end
 function PaladinBuffer:UNIT_PET(event, unit)
 	if( UnitExists(petUnits[unit]) ) then
 		groupRoster[unit] = petUnits[unit]
+		guidMap[UnitGUID(unit)] = unit
 	else
 		groupRoster[unit] = nil
 	end
+end
+
+local function loadUnit(unit)
+		local name = UnitName(unit)
+		groupRoster[name] = unit
+
+		local pet = petUnits[unit]
+		if( UnitExists(pet) ) then
+			groupRoster[unit] = pet
+			guidMap[UnitGUID(pet)] = pet
+		end
 end
 
 -- Raid roster was updated, reload it
@@ -334,10 +348,12 @@ function PaladinBuffer:ScanGroup()
 	-- Reset data from previous scan
 	for k in pairs(groupRoster) do groupRoster[k] = nil end
 	for k in pairs(hasGroupRank) do hasGroupRank[k] = nil end
-
+	for k in pairs(guidMap) do guidMap[k] = nil end
+	
 	-- Player always has rank
 	groupRoster[playerName] = "player"
 	hasGroupRank[playerName] = true
+	guidMap[playerGUID] = "player"
 	
 	-- Left raid :(
 	if( GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 ) then
@@ -354,26 +370,16 @@ function PaladinBuffer:ScanGroup()
 		end
 		
 		if( name ~= playerName ) then
-			groupRoster[name] = raidUnits[i]
-			
-			local pet = petUnits[raidUnits[i]]
-			if( UnitExists(pet) ) then
-				groupRoster[raidUnits[i]] = pet
-			end
+			loadUnit(raidUnits[i])
 		end
 	end
 
 	-- Not in a raid, so scan party
 	if( GetNumRaidMembers() == 0 ) then
 		for i=1, GetNumPartyMembers() do
-			local name = UnitName(partyUnits[i])
-			hasGroupRank[name] = true
-			groupRoster[name] = partyUnits[i]
-
-			local pet = petUnits[partyUnits[i]]
-			if( UnitExists(pet) ) then
-				groupRoster[partyUnits[i]] = pet
-			end
+			self:LoadUnit(partyUnits[i])
+		
+			hasGroupRank[UnitName(partyUnits[i])] = true
 		end
 	end
 		
@@ -394,11 +400,13 @@ end
 -- Entering the world for the first time, might need to do some setup
 function PaladinBuffer:PLAYER_ENTERING_WORLD()
 	self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+	playerGUID = UnitGUID("player")
 
 	if( GetNumRaidMembers() > 0 or GetNumPartyMembers() > 0 ) then
 		self:ScanGroup()
 	else
 		groupRoster[playerName] = "player"
+		guidMap[playerGUID] = "player"
 		hasGroupRank[playerName] = true
 	end
 	
@@ -413,7 +421,10 @@ function PaladinBuffer:ZONE_CHANGED_NEW_AREA()
 	local type = select(2, IsInInstance())
 	if( type ~= instanceType ) then
 		if( self.db.profile.inside[type] ) then
+			-- Enable main
 			self:Enable()
+			
+			-- Enable modules
 			self.isEnabled = true
 			for _, module in pairs(self.modules) do
 				if( module.Enable ) then
@@ -421,7 +432,10 @@ function PaladinBuffer:ZONE_CHANGED_NEW_AREA()
 				end
 			end
 		else
+			-- Disable main
 			self:Disable()
+			
+			-- Disable modules
 			self.isEnabled = nil
 			for _, module in pairs(self.modules) do
 				if( module.Disable ) then

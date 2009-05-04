@@ -6,7 +6,7 @@ local blessings = {[GetSpellInfo(56520)] = "might", [GetSpellInfo(48934)] = "gmi
 local blessingIcons = {["gmight"] = select(3, GetSpellInfo(48934)), ["gwisdom"] = select(3, GetSpellInfo(48938)), ["gsanct"] = select(3, GetSpellInfo(25899)),["gkings"] = select(3, GetSpellInfo(25898)), ["might"] = select(3, GetSpellInfo(56520)), ["wisdom"] = select(3, GetSpellInfo(56521)), ["sanct"] = select(3, GetSpellInfo(20911)), ["kings"] = select(3, GetSpellInfo(20217))}
 local classFrames, singleTimes, greaterTimes, singleTypes, greaterTypes = {}, {}, {}, {}, {}
 local playerName = UnitName("player")
-local inCombat, assignments, groupRoster, petUnits
+local inCombat, assignments, groupRoster, petUnits, guidMap
 
 function Buff:Enable()
 	if( PaladinBuffer.disabled ) then
@@ -16,6 +16,7 @@ function Buff:Enable()
 	assignments = PaladinBuffer.db.profile.assignments[playerName]
 	groupRoster = PaladinBuffer.groupRoster
 	petUnits = PaladinBuffer.petUnits
+	guidMap = PaladinBuffer.guidMap
 	inCombat = InCombatLockdown()
 
 	self:RegisterEvent("UNIT_AURA")
@@ -159,6 +160,7 @@ function Buff:UpdateColorStatus(frame, filter)
 		local classToken = self:GetUnitClass(unit)			
 		if( classToken == filter or filter == "ALL" ) then
 			local greaterBlessing = PaladinBuffer.blessings[assignments[classToken]]
+			local guid = UnitGUID(unit)
 			
 			-- Are we assigned to cast a single on this person?
 			if( assignments[name] ) then
@@ -167,8 +169,8 @@ function Buff:UpdateColorStatus(frame, filter)
 					hasSingleOOR = true
 				end
 				
-				local buffTime = singleTimes[name]
-				if( not buffTime or singleTypes[name] ~= assignments[name] ) then
+				local buffTime = singleTimes[guid]
+				if( not buffTime or singleTypes[guid] ~= assignments[name] ) then
 					hasSingleMissing = true
 				elseif( not lowestSingle or lowestSingle > buffTime ) then
 					lowestSingle = buffTime
@@ -184,8 +186,8 @@ function Buff:UpdateColorStatus(frame, filter)
 				end
 
 				-- Find the lowest buff time + does someone have a buff missing
-				local buffTime = greaterTimes[name]
-				if( not buffTime or greaterTypes[name] ~= assignments[classToken] ) then
+				local buffTime = greaterTimes[guid]
+				if( not buffTime or greaterTypes[guid] ~= assignments[classToken] ) then
 					hasGreaterMissing = true
 				elseif( not lowestGreater or lowestGreater > buffTime ) then
 					lowestGreater = buffTime
@@ -290,8 +292,12 @@ function Buff:FindClosetToBuff(classFilter)
 end
 
 -- Find time left on the buff assigned to theree class/player
-function Buff:GetBuffTimeLeft(unit, name, classToken)
-	local assignedToken = assignments[name] or assignments[classToken]
+function Buff:GetBuffTimeLeft(unit, classToken)
+	local assignedToken = assignments[classToken]
+	if( UnitIsPlayer(unit) and assignments[UnitName(unit)] ) then
+		assignedToken = assignments[UnitName(unit)]
+	end
+	
 	if( not assignedToken ) then
 		return nil
 	end
@@ -478,17 +484,16 @@ end
 
 -- Scan auras for the time left on the blessing
 function Buff:ScanAuras(unit)
-	if( UnitCreatureFamily(unit) ) then return end
-
-	local class = select(2, UnitClass(unit))
+	local class = self:GetUnitClass(unit)
+	local guid = UnitGUID(unit)
 	local name = UnitName(unit)
 	
 	-- Remove the blessing timers we had for them last update
-	singleTimes[name] = nil
-	singleTypes[name] = nil
+	singleTimes[guid] = nil
+	singleTypes[guid] = nil
 	
-	greaterTimes[name] = nil	
-	greaterTypes[name] = nil
+	greaterTimes[guid] = nil	
+	greaterTypes[guid] = nil
 	
 	local id = 1
 	while( true ) do
@@ -497,14 +502,14 @@ function Buff:ScanAuras(unit)
 		
 		-- Store the lowest single and greater blessing we cast on them, if it was assigned for them
 		local spellToken = blessings[buffName]
-		if( spellToken and ( assignments[class] == spellToken or assignments[name] == spellToken ) ) then
+		if( spellToken and ( assignments[name] == spellToken or assignments[class] == spellToken ) ) then
 			local category = PaladinBuffer.blessingTypes[spellToken]
-			if( category == "single" and ( not singleTimes[name] or singleTimes[name] > endTime ) ) then
-				singleTimes[name] = endTime
-				singleTypes[name] = spellToken
-			elseif( category == "greater" and ( not greaterTimes[name] or greaterTimes[name] > endTime ) ) then
-				greaterTimes[name] = endTime
-				greaterTypes[name] = spellToken
+			if( category == "single" and ( not singleTimes[guid] or singleTimes[guid] > endTime ) ) then
+				singleTimes[guid] = endTime
+				singleTypes[guid] = spellToken
+			elseif( category == "greater" and ( not greaterTimes[guid] or greaterTimes[guid] > endTime ) ) then
+				greaterTimes[guid] = endTime
+				greaterTypes[guid] = spellToken
 			end
 		end
 		
@@ -525,9 +530,10 @@ local function updateTimer(self)
 		
 	-- Find the lowest single blessing timer (if any)
 	local lowestTime
-	for name, endTime in pairs(singleTimes) do
-		if( ( not lowestTime or lowestTime > endTime ) and UnitExists(name) ) then
-			if( singleTypes[name] == assignments[name] and ( self.filter == "ALL" or self.filter == select(2, UnitClass(name)) ) ) then
+	for guid, endTime in pairs(singleTimes) do
+		local unit = guidMap[guid]
+		if( ( not lowestTime or lowestTime > endTime ) and UnitExists(unit) ) then
+			if( singleTypes[guid] == assignments[UnitName(unit)] and ( self.filter == "ALL" or self.filter == Buff:GetUnitClass(unit) ) ) then
 				lowestTime = endTime
 			end
 		end
@@ -541,10 +547,11 @@ local function updateTimer(self)
 
 	-- Find the lowest greater blessing timer (if any)
 	local lowestTime
-	for name, endTime in pairs(greaterTimes) do
-		if( ( not lowestTime or lowestTime > endTime ) and UnitExists(name) ) then
-			local classToken = select(2, UnitClass(name))
-			if( greaterTypes[name] == assignments[classToken] and ( self.filter == "ALL" or self.filter == classToken ) ) then
+	for guid, endTime in pairs(greaterTimes) do
+		local unit = guidMap[guid]
+		if( ( not lowestTime or lowestTime > endTime ) and UnitExists(unit) ) then
+			local classToken = Buff:GetUnitClass(unit)
+			if( greaterTypes[guid] == assignments[classToken] and ( self.filter == "ALL" or self.filter == classToken ) ) then
 				lowestTime = endTime
 			end
 		end
@@ -552,7 +559,7 @@ local function updateTimer(self)
 		
 	if( lowestTime and lowestTime >= time ) then
 		Buff:FormatTime(self.greaterText, lowestTime - time)
-	elseif( self.filter ~= "ALL" and not assignments[self.filter] ) then
+	elseif( ( self.filter ~= "ALL" and not assignments[self.filter] ) or ( self.filter == "ALL" and not lowestTime ) ) then
 		self.greaterText:SetText(L["None"])
 	else
 		self.greaterText:SetText("---")
@@ -580,7 +587,7 @@ local function updatePopoutDuration(self)
 	elseif( not UnitIsConnected(self.unit) ) then
 		self.duration:SetText(L["Offline"])
 	else
-		local seconds = Buff:GetBuffTimeLeft(self.unit, name, self.classToken)
+		local seconds = Buff:GetBuffTimeLeft(self.unit, self.classToken)
 		if( seconds and seconds > 0 ) then
 			Buff:FormatTime(self.duration, seconds)
 		else
@@ -649,7 +656,12 @@ end
 local function popoutOnShow(self)
 	-- Owner name
 	local name = (UnitName(self.unit)) or UNKNOWN
-	self.name:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[self.classToken].r, 255 * RAID_CLASS_COLORS[self.classToken].g, 255 * RAID_CLASS_COLORS[self.classToken].b, name)
+	local isPet = ""
+	if( not UnitIsPlayer(self.unit) ) then
+		isPet = L["[P] "]
+	end
+	
+	self.name:SetFormattedText("%s|cff%02x%02x%02x%s|r", isPet, 255 * RAID_CLASS_COLORS[self.classToken].r, 255 * RAID_CLASS_COLORS[self.classToken].g, 255 * RAID_CLASS_COLORS[self.classToken].b, name)
 	self.playerName = name
 
 	updatePopoutDuration(self)

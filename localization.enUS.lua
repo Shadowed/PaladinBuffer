@@ -26,6 +26,7 @@ PaladinBufferLocals = {
 	["Succubus"] = "Succubus",
 	["Felhunter"] = "Felhunter",
 	["Water Elemental"] = "Water Elemental",
+	["[P] "] = "[P] ",
 	
 	-- Slash commands
 	["Slash commands"] = "Slash commands",
