@@ -6,7 +6,7 @@ PaladinBuffer = LibStub("AceAddon-3.0"):NewAddon("PaladinBuffer", "AceEvent-3.0"
 
 local L = PaladinBufferLocals
 local playerName = UnitName("player")
-local raidUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData, freeAssign = {}, {}, {}, {}, {}, {}, {}
+local raidUnits, petUnits, partyUnits, groupRoster, hasGroupRank, classList, talentData, freeAssign = {}, {}, {}, {}, {}, {}, {}, {}
 local improved = {[GetSpellInfo(20244)] = {"wisdom", "gwisdom"}, [GetSpellInfo(20042)] = {"might", "gmight"}}
 local blessingTypes = {["gmight"] = "greater", ["gwisdom"] = "greater", ["gkings"] = "greater", ["gsanct"] = "greater", ["might"] = "single", ["wisdom"] = "single", ["kings"] = "single", ["sanct"] = "single"}
 local blessings = {["might"] = GetSpellInfo(56520), ["gmight"] = GetSpellInfo(48934), ["wisdom"] = GetSpellInfo(56521), ["gwisdom"] = GetSpellInfo(48938), ["sanct"] = GetSpellInfo(20911), ["gsanct"] = GetSpellInfo(25899), ["kings"] = GetSpellInfo(20217), ["gkings"] = GetSpellInfo(25898)}
@@ -18,6 +18,7 @@ function PaladinBuffer:OnInitialize()
 		profile = {
 			ppSupport = true,
 			requireLeader = false,
+			mergePets = false,
 			offline = false,
 			greaterbinding = "CTRL-1",
 			singleBinding = "CTRL-2",
@@ -60,10 +61,7 @@ function PaladinBuffer:OnInitialize()
 		PaladinBuffer.disabled = true
 	end
 	
-	self:RegisterEvent("RAID_ROSTER_UPDATE", "ScanGroup")
-	self:RegisterEvent("PARTY_MEMBERS_CHANGED", "ScanGroup")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
-	self:RegisterEvent("PLAYER_REGEN_DISABLED")
 	self:RegisterEvent("SPELLS_CHANGED", "ScanSpells")
 	self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 		
@@ -71,7 +69,18 @@ function PaladinBuffer:OnInitialize()
 	for classToken in pairs(RAID_CLASS_COLORS) do
 		classList[classToken] = true
 	end
+
+	-- Save a list of unitids
+	for i=1, MAX_RAID_MEMBERS do
+		raidUnits[i] = "raid" .. i
+		petUnits[raidUnits[i]] = raidUnits[i] .. "pet"
+	end
 	
+	for i=1, MAX_PARTY_MEMBERS do
+		partyUnits[i] = "party" .. i
+		petUnits[partyUnits[i]] = partyUnits[i] .. "pet"
+	end
+
 	-- So modules can access this data
 	self.classList = classList
 	self.blessings = blessings
@@ -83,15 +92,25 @@ function PaladinBuffer:OnInitialize()
 	self.groupRoster = groupRoster
 	self.freeAssign = freeAssign
 	self.blacklist = blacklist
+	self.petUnits = petUnits
+end
+
+-- Only call events if the mod is enabled
+function PaladinBuffer:Enable()
+	self:RegisterEvent("PLAYER_REGEN_DISABLED")
+	self:RegisterEvent("RAID_ROSTER_UPDATE", "ScanGroup")
+	self:RegisterEvent("PARTY_MEMBERS_CHANGED", "ScanGroup")
+	self:RegisterEvent("UNIT_PET")
 	
-	-- Save a list of unitids
-	for i=1, MAX_RAID_MEMBERS do
-		raidUnits[i] = "raid" .. i
-	end
-	
-	for i=1, MAX_PARTY_MEMBERS do
-		partyUnits[i] = "party" .. i
-	end
+	self:ScanGroup()
+	self:UpdateKeyBindings()
+end
+
+function PaladinBuffer:Disable()
+	self:UnregisterEvent("RAID_ROSTER_UPDATE")
+	self:UnregisterEvent("PARTY_MEMBERS_CHANGED")
+	self:UnregisterEvent("UNIT_PET")
+	self:UnregisterEvent("PLAYER_REGEN_DISABLED")
 end
 
 -- Do they have permission to assign us something?
@@ -110,7 +129,7 @@ function PaladinBuffer:ClearAssignments(caster)
 			self.db.profile.assignments[caster][assignment] = nil
 		end
 		
-		self:SendMessage("PB_CLEARED_ASSIGNMENTS", caster)
+		self:SendMessage("PB_ASSIGNMENTS_UPDATED", caster)
 	end
 end
 
@@ -128,13 +147,10 @@ local function setupPlayerData(caster)
 		self.db.profile.blessings[caster] = {}
 		fire = true
 	end
-
-
-	self:SendMessage("PB_DISCOVERED_PLAYER", caster)
 end
 
 -- Assign a Paladin to a specific assignment
-function PaladinBuffer:AssignBlessing(caster, spellToken, assignment)
+function PaladinBuffer:AssignBlessing(caster, spellToken, assignment, skip)
 	setupPlayerData(caster)
 	
 	-- Check if the blessing was already assigned, if so cancel it for the other person
@@ -142,17 +158,19 @@ function PaladinBuffer:AssignBlessing(caster, spellToken, assignment)
 		for name, assignments in pairs(PaladinBuffer.db.profile.assignments) do
 			if( name ~= caster and assignments[assignment] == spellToken ) then
 				assignments[assignment] = nil
-				self:SendMessage("PB_ASSIGNED_BLESSINGS", name, assignment)
 			end
 		end
 	end
 	
 	self.db.profile.assignments[caster][assignment] = spellToken
-	self:SendMessage("PB_ASSIGNED_BLESSINGS", caster, assignment, spellToken)
+	
+	if( not skip ) then
+		self:SendMessage("PB_ASSIGNMENTS_UPDATED", caster)
+	end
 end
 
 -- Mass assign everyone to this
-function PaladinBuffer:MassAssignBlessing(caster, spellToken)
+function PaladinBuffer:MassAssignBlessing(caster, spellToken, skip)
 	setupPlayerData(caster)
 	
 	-- Assign the player to doing the blessing on everyone in this class as long as it's not blacklisted
@@ -169,17 +187,22 @@ function PaladinBuffer:MassAssignBlessing(caster, spellToken)
 				for classToken, token in pairs(assignments) do
 					if( token == spellToken ) then
 						assignments[classToken] = nil
-						self:SendMessage("PB_ASSIGNED_BLESSINGS", name, classToken, spellToken)
 					end
 				end
 			end
 		end
 	end
 	
-	-- Trigger event now
-	self:SendMessage("PB_ASSIGNED_BLESSINGS", caster, "ALL", spellToken)
-	
+	if( not skip ) then
+		self:SendMessage("PB_ASSIGNMENTS_UPDATED", caster)
+	end
 end
+
+-- Update assignment permissions
+function PaladinBuffer:UpdatePermissions(caster, free)
+	freeAssign[caster] = free
+end
+
 -- Reset the talent data we have for them
 function PaladinBuffer:ResetBlessingData(caster)
 	if( self.db.profile.blessings[caster] ) then
@@ -187,16 +210,19 @@ function PaladinBuffer:ResetBlessingData(caster)
 			self.db.profile.blessings[caster][k] = nil
 		end
 		
-		self:SendMessage("PB_RESET_SPELLS", caster)
+		self:SendMessage("PB_SPELL_DATA", caster)
 	end
 end
 
 -- Set someone as having an improved blessing
-function PaladinBuffer:SetBlessingData(caster, spellToken, rank)
+function PaladinBuffer:SetBlessingData(caster, spellToken, rank, skip)
 	setupPlayerData(caster)
 	
 	self.db.profile.blessings[caster][spellToken] = rank
-	self:SendMessage("PB_SPELL_DATA", caster, spellToken, rank)
+	
+	if( not skip ) then
+		self:SendMessage("PB_SPELL_DATA", caster, spellToken, rank)
+	end
 end
 
 -- Clear assignments to people having none
@@ -206,7 +232,7 @@ function PaladinBuffer:ClearAllAssignments()
 			data[target] = nil
 		end
 		
-		self:SendMessage("PB_CLEARED_ASSIGNMENTS")
+		self:SendMessage("PB_ASSIGNMENTS_UPDATED")
 	end
 end
 
@@ -214,7 +240,7 @@ end
 function PaladinBuffer:RemovePlayerData(caster)
 	self.db.profile.assignments[caster] = nil
 	self.db.profile.blessings[caster] = nil
-	self:SendMessage("PB_RESET_ASSIGNMENTS", caster)
+	self:SendMessage("PB_ASSIGNMENTS_UPDATED", caster)
 end
 
 -- Remove the table completely, remove all assignments
@@ -226,7 +252,7 @@ function PaladinBuffer:ResetAllAssignments()
 		end
 	end
 
-	self:SendMessage("PB_RESET_ASSIGNMENTS")
+	self:SendMessage("PB_ASSIGNMENTS_UPDATED")
 end
 
 -- Scan what spells the player has
@@ -257,7 +283,6 @@ function PaladinBuffer:ScanSpells()
 	for assignedTo, token in pairs(self.db.profile.assignments[playerName]) do
 		if( not self.db.profile.blessings[playerName][token] ) then
 			self.db.profile.assignments[playerName][assignedTo] = nil
-			self:SendMessage("PB_ASSIGNED_BLESSINGS", playerName, assignedTo)
 
 			sendUpdate = true
 		end
@@ -286,12 +311,22 @@ function PaladinBuffer:ScanSpells()
 	if( not self.isLoggingIn and ( GetNumRaidMembers() > 0 or GetNumPartyMembers() > 0 ) ) then
 		if( fullUpdate ) then
 				self.modules.Sync:SendAssignments()
+				self:SendMessage("PB_ASSIGNMENTS_UPDATED")
 		else
 				self.modules.Sync:SendBlessingData()
 		end
 	end
 	
-	self:SendMessage("PB_SPELLS_SCANNED")
+	self:SendMessage("PB_SPELL_DATA")
+end
+
+-- Update the rosters pet info
+function PaladinBuffer:UNIT_PET(event, unit)
+	if( UnitExists(petUnits[unit]) ) then
+		groupRoster[unit] = petUnits[unit]
+	else
+		groupRoster[unit] = nil
+	end
 end
 
 -- Raid roster was updated, reload it
@@ -320,6 +355,11 @@ function PaladinBuffer:ScanGroup()
 		
 		if( name ~= playerName ) then
 			groupRoster[name] = raidUnits[i]
+			
+			local pet = petUnits[raidUnits[i]]
+			if( UnitExists(pet) ) then
+				groupRoster[raidUnits[i]] = pet
+			end
 		end
 	end
 
@@ -329,6 +369,11 @@ function PaladinBuffer:ScanGroup()
 			local name = UnitName(partyUnits[i])
 			hasGroupRank[name] = true
 			groupRoster[name] = partyUnits[i]
+
+			local pet = petUnits[partyUnits[i]]
+			if( UnitExists(pet) ) then
+				groupRoster[partyUnits[i]] = pet
+			end
 		end
 	end
 		
@@ -368,6 +413,7 @@ function PaladinBuffer:ZONE_CHANGED_NEW_AREA()
 	local type = select(2, IsInInstance())
 	if( type ~= instanceType ) then
 		if( self.db.profile.inside[type] ) then
+			self:Enable()
 			self.isEnabled = true
 			for _, module in pairs(self.modules) do
 				if( module.Enable ) then
@@ -375,6 +421,7 @@ function PaladinBuffer:ZONE_CHANGED_NEW_AREA()
 				end
 			end
 		else
+			self:Disable()
 			self.isEnabled = nil
 			for _, module in pairs(self.modules) do
 				if( module.Disable ) then

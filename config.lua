@@ -93,6 +93,13 @@ local function loadOptions()
 						type = "toggle",
 						name = L["Enable Pally Power support"],
 						desc = L["Allows you to both send and receive assignments from Pally Power users."],
+						width = "full",
+					},
+					mergePets = {
+						order = 0.05,
+						type = "toggle",
+						name = L["Merge pets into their buff class"],
+						desc = L["Pets will be shown in the buff frame under the class that they receive greater buffs for, the pet is basically shown as another player.\n\nThis is the following:\nHunter pets -> Warriors\nDeath Knight pets -> Rogues\nFelguard/Voidwalker -> Warriors\nSuccubus/Felhunter -> Warlocks"],
 					},
 					autoLock = {
 						order = 0.10,

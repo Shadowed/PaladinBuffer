@@ -1,7 +1,7 @@
 ## Interface: 30100
 ## Title: Paladin Buffer
 ## Notes: Simplifies Paladin greater and single blessings inside raids
-## Author: Mayen
+## Author: Selari
 ## SavedVariables: PaladinBufferDB
 
 libs\LibStub-1.0\LibStub-1.0.xml

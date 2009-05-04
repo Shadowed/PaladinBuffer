@@ -1,7 +1,7 @@
 if( not PaladinBuffer ) then return end
 
 local Sync = PaladinBuffer:NewModule("Sync", "AceEvent-3.0", "AceComm-3.0")
-local classList, timerFrame, freeAssign
+local classList
 local ignorePP, requestThrottle = {}, {}
 local playerName = UnitName("player")
 local THROTTLE_TIME = 5
@@ -11,7 +11,6 @@ function Sync:OnEnable()
 	self.RegisterComm(self, "PALB")
 
 	classList = PaladinBuffer.classList
-	freeAssign = PaladinBuffer.freeAssign
 end
 
 function Sync:OnDisable()
@@ -40,23 +39,8 @@ function Sync:RequestData()
 	self:SendAddonMessage("REQUEST")
 	
 	-- Request data from Pally Power users
-	-- will do a small 0.5 delay so that PB users will see that they should ignore any syncs that are sent as compats
 	if( PaladinBuffer.db.profile.ppSupport ) then
-		local timeElapsed = 0
-		if( not timerFrame ) then
-			timerFrame = CreateFrame("Frame")
-			timerFrame:SetScript("OnUpdate", function(self, elapsed)
-				timeElapsed = timeElapsed - elapsed
-				
-				if( timeElapsed <= 0 ) then
-					Sync:SendAddonMessage("REQ", "PLPWR")
-					self:Hide()
-				end
-			end)
-		end
-		
-		timeElapsed = 0.5
-		timerFrame:Show()
+		Sync:SendAddonMessage("REQ", "PLPWR")
 	end
 end
 
@@ -162,7 +146,7 @@ function Sync:ParseTalents(sender, ...)
 		rank = tonumber(rank)
 		
 		if( spell and rank and PaladinBuffer.blessingTypes[spell] ) then
-			PaladinBuffer:SetBlessingData(sender, spell, rank)	
+			PaladinBuffer:SetBlessingData(sender, spell, rank, true)	
 		end
 	end
 end
@@ -178,7 +162,7 @@ function Sync:ParseAssignments(sender, ...)
 			
 			-- Validate it, don't let a player get assigned a greater blessing and don't let a class be assigned a single blessing
 			if( not spell or ( classList[assignment] and PaladinBuffer.blessingTypes[spell] == "greater" ) or ( not classList[assignment] and PaladinBuffer.blessingTypes[spell] == "single" ) ) then
-				PaladinBuffer:AssignBlessing(sender, spell, assignment)
+				PaladinBuffer:AssignBlessing(sender, spell, assignment, true)
 			end
 		end
 	end
@@ -225,23 +209,25 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 	elseif( cmd == "BLESSINGS" ) then
 		PaladinBuffer:ResetBlessingData(sender)
 		self:ParseTalents(sender, string.split(":", arg))
+		self:SendMessage("PB_SPELL_DATA", sender)
 			
 	-- Reset + Assign, this implies that any data not present is there because they aren't assigned it
 	elseif( cmd == "RASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		self:ParsePlayerAssignments(true, string.split(";", arg))
+		self:SendMessage("PB_DATA_RECEIVED", sender)
 		
 	-- Assign, this implies that the data is partially sent, meaning it might be multiple ASSIGNs to get all of them done
 	-- I'm using RASSIGN for this, ASSIGN is "just in case"
 	elseif( cmd == "ASSIGN" and arg and playerName ~= sender and PaladinBuffer:HasPermission(sender) and not self.lockChanges ) then
 		self:ParsePlayerAssignments(false, string.split(";", arg))
+		self:SendMessage("PB_DATA_RECEIVED", sender)
 		
 	-- We got this persons assignments
 	elseif( cmd == "MYDATA" and arg and playerName ~= sender ) then
 		local talents, assignments, leaderRequired = string.split(";", arg)
 		if( talents and assignments ) then
 			-- You need assist or leader to change there assignments
-			freeAssign[sender] = (leaderRequired == "true") and false or true
-			self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
+			PaladinBuffer:UpdatePermissions(sender, ( arg == "true" and false or true ))
 
 			-- It's implied that if the information wasn't sent in this that they aren't assigned to it
 			-- we basically trade a trivial amount of CPU (resetting two tables) for less comm data sent through the addon channels
@@ -252,11 +238,14 @@ function Sync:OnCommReceived(prefix, msg, type, sender)
 				PaladinBuffer:ClearAssignments(sender)
 				self:ParseAssignments(sender, string.split(":", assignments))
 			end
+			
+			self:SendMessage("PB_DATA_RECEIVED", sender)
+			self:SendMessage("PB_SPELL_DATA", sender)
 		end
 	
 	-- Leadership required?
 	elseif( cmd == "LEADER" and arg and playerName ~= sender ) then
-		freeAssign[sender] = (leaderRequired == "true") and false or true
+		PaladinBuffer:UpdatePermissions(sender, ( arg == "true" and false or true ))
 		self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
 	
 	-- Clear assignments from people
@@ -411,15 +400,15 @@ end
 function Sync:ParsePPBlessingData(sender, singleType, greaterType, rank, improved)
 	-- They don't have this spell, so reset it
 	if( not rank ) then
-		PaladinBuffer:SetBlessingData(sender, singleType, nil)
-		PaladinBuffer:SetBlessingData(sender, greaterType, nil)
+		PaladinBuffer:SetBlessingData(sender, singleType, nil, true)
+		PaladinBuffer:SetBlessingData(sender, greaterType, nil, true)
 		return
 	end
 	
 	-- We have to fake the rank for singles, as PP only passes the highest
 	local fraction = (improved or 0) / 10
-	PaladinBuffer:SetBlessingData(sender, singleType, singleMaxRanks[singleType] + fraction)
-	PaladinBuffer:SetBlessingData(sender, greaterType, rank + fraction)
+	PaladinBuffer:SetBlessingData(sender, singleType, singleMaxRanks[singleType] + fraction, true)
+	PaladinBuffer:SetBlessingData(sender, greaterType, rank + fraction, true)
 end
 
 function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
@@ -511,14 +500,16 @@ function Sync:CHAT_MSG_ADDON(event, prefix, msg, type, sender)
 				if( spellID == "" or classID >= 11 ) then break end
 				spellID = tonumber(spellID) or "n"
 										
-				PaladinBuffer:AssignBlessing(sender, greaterConversions[spellID], classConversions[classID])
+				PaladinBuffer:AssignBlessing(sender, greaterConversions[spellID], classConversions[classID], true)
 			end
 			
+			self:SendMessage("PB_DATA_RECEIVED", sender)
+			self:SendMessage("PB_SPELL_DATA", sender)
 		end
 	
 	-- Should I support this?
 	elseif( cmd == "FREEASSIGN" and arg and playerName ~= sender ) then
-		freeAssign[sender] = ( arg == "YES" ) and true or false
+		PaladinBuffer:UpdatePermissions(sender, ( arg == "YES" and true or false ))
 		self:SendMessage("PB_PERMISSIONS_UPDATED", sender)
 	
 	-- Clear requested data

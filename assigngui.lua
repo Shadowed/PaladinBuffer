@@ -9,7 +9,7 @@ local ROW_HEIGHT = 17
 local groupList, displayList, classTotals, blacklist
 local classes = {"WARRIOR","ROGUE","PRIEST","DRUID","PALADIN","HUNTER","MAGE","WARLOCK","SHAMAN", "DEATHKNIGHT"}
 local singleBlacklist = {["WARRIOR"] = "wisdom", ["ROGUE"] = "wisdom", ["PRIEST"] = "might", ["MAGE"] = "might", ["DEATHKNIGHT"] = "wisdom"}
-local blessingOrder = {["gmight"] = 1, ["gwisdom"] = 2, ["gkings"] = 3, ["gsanct"] = 4}
+local blessingOrder = {["gmight"] = 1, ["gwisdom"] = 2, ["gkings"] = 3, ["gsanct"] = 4, ["none"] = 5}
 local blessings = {"gmight", "gwisdom", "gkings", "gsanct"}
 local singleBlessings = {"might", "wisdom", "kings", "sanct"}
 local blessingIcons = {["gmight"] = select(3, GetSpellInfo(48934)), ["gwisdom"] = select(3, GetSpellInfo(48938)), ["gsanct"] = select(3, GetSpellInfo(25899)),["gkings"] = select(3, GetSpellInfo(25898)), ["might"] = select(3, GetSpellInfo(56520)), ["wisdom"] = select(3, GetSpellInfo(56521)), ["sanct"] = select(3, GetSpellInfo(20911)), ["kings"] = select(3, GetSpellInfo(20217))}
@@ -191,6 +191,8 @@ function Assign:UpdateBlessingInfo(rowID)
 	
 	-- Hide all blessings first
 	for _, button in pairs(row.blessings) do
+		button.spellToken = "none"
+		button:ClearAllPoints()
 		button:Hide()
 	end
 		
@@ -226,33 +228,33 @@ function Assign:UpdateBlessingInfo(rowID)
 
 			button.spellToken = spellToken
 			button:SetNormalTexture(blessingIcons[spellToken])
-			button:ClearAllPoints()
 			button:Show()
 		end
 	end
 
+	
 	-- Sort it out
 	table.sort(row.blessings, sortBlessings)
 
 	-- Now position blessings
-	if( row.blessings[2] and row.blessings[2]:IsVisible() ) then
-		row.blessings[2]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 60, -6)
-		row.blessings[2]:Show()
-	end
-	
 	if( row.blessings[1] and row.blessings[1]:IsVisible()) then
 		row.blessings[1]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -6)
 		row.blessings[1]:Show()
 	end
 
-	if( row.blessings[4] and row.blessings[4]:IsVisible()) then
-		row.blessings[4]:SetPoint("TOPLEFT", row.blessings[2], "BOTTOMLEFT", 0, -2)
-		row.blessings[4]:Show()
+	if( row.blessings[2] and row.blessings[2]:IsVisible() ) then
+		row.blessings[2]:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 60, -6)
+		row.blessings[2]:Show()
 	end
 	
 	if( row.blessings[3] and row.blessings[3]:IsVisible()) then
 		row.blessings[3]:SetPoint("TOPLEFT", row.blessings[1], "BOTTOMLEFT", 0, -2)
 		row.blessings[3]:Show()
+	end
+
+	if( row.blessings[4] and row.blessings[4]:IsVisible()) then
+		row.blessings[4]:SetPoint("TOPLEFT", row.blessings[2], "BOTTOMLEFT", 0, -2)
+		row.blessings[4]:Show()
 	end
 end
 
@@ -342,9 +344,9 @@ function Assign:UpdatePlayerRows()
 end
 
 -- Frame shown, so we want to be updating the UI
-local function assignmentUpdate(...)
+local function assignmentUpdate()
 	Assign:UpdatePlayerRows()
-	Assign:UpdateAssignments(...)
+	Assign:UpdateAssignments()
 
 	if( Assign.singleFrame and Assign.singleFrame:IsVisible() ) then
 		Assign:UpdateSingle()
@@ -376,26 +378,16 @@ local function OnShow(self)
 	Assign:UpdatePlayerRows()
 	Assign:UpdateAssignments()
 	
-	-- Talents changed, update assignment info
-	Assign:RegisterMessage("PB_SPELLS_SCANNED", assignmentUpdate)
-	
-	-- New player found, will need to update rows
-	Assign:RegisterMessage("PB_DISCOVERED_PLAYER", assignmentUpdate)
+	-- What blessings they can cast changed
+	Assign:RegisterMessage("PB_SPELL_DATA", assignmentUpdate)
 
-	-- All assignments reset, so we can hide most of the UI
-	Assign:RegisterMessage("PB_RESET_ASSIGNMENTS", assignmentUpdate)
-
-	-- What blessings they were assigned changed
-	Assign:RegisterMessage("PB_CLEARED_ASSIGNMENTS", assignmentUpdate)
-	Assign:RegisterMessage("PB_ASSIGNED_BLESSINGS", assignmentUpdate)
+	-- Assignments changed in some way
+	Assign:RegisterMessage("PB_ASSIGNMENTS_UPDATED", assignmentUpdate)
+	Assign:RegisterMessage("PB_DATA_RECEIVED", assignmentUpdate)
 	
 	-- Roster/permissions changed, need to update permissions
 	Assign:RegisterMessage("PB_PERMISSIONS_UPDATED", "UpdatePermissions")
 	Assign:RegisterMessage("PB_ROSTER_UPDATED", "UpdatePermissions")
-		
-	-- What blessings they can cast changed
-	Assign:RegisterMessage("PB_RESET_SPELLS", "UpdateAssignments")
-	Assign:RegisterMessage("PB_SPELL_DATA", "UpdateAssignments")
 		
 	-- Position
 	if( PaladinBuffer.db.profile.position ) then

@@ -6,7 +6,7 @@ local blessings = {[GetSpellInfo(56520)] = "might", [GetSpellInfo(48934)] = "gmi
 local blessingIcons = {["gmight"] = select(3, GetSpellInfo(48934)), ["gwisdom"] = select(3, GetSpellInfo(48938)), ["gsanct"] = select(3, GetSpellInfo(25899)),["gkings"] = select(3, GetSpellInfo(25898)), ["might"] = select(3, GetSpellInfo(56520)), ["wisdom"] = select(3, GetSpellInfo(56521)), ["sanct"] = select(3, GetSpellInfo(20911)), ["kings"] = select(3, GetSpellInfo(20217))}
 local classFrames, singleTimes, greaterTimes, singleTypes, greaterTypes = {}, {}, {}, {}, {}
 local playerName = UnitName("player")
-local inCombat
+local inCombat, assignments, groupRoster, petUnits
 
 function Buff:Enable()
 	if( PaladinBuffer.disabled ) then
@@ -15,6 +15,7 @@ function Buff:Enable()
 	
 	assignments = PaladinBuffer.db.profile.assignments[playerName]
 	groupRoster = PaladinBuffer.groupRoster
+	petUnits = PaladinBuffer.petUnits
 	inCombat = InCombatLockdown()
 
 	self:RegisterEvent("UNIT_AURA")
@@ -22,9 +23,7 @@ function Buff:Enable()
 	self:RegisterEvent("PLAYER_REGEN_ENABLED")
 	
 	self:RegisterMessage("PB_ROSTER_UPDATED", "UpdateClassFrames")
-	self:RegisterMessage("PB_ASSIGNED_BLESSINGS", "UpdateFrame")
-	self:RegisterMessage("PB_RESET_ASSIGNMENTS", "UpdateFrame")
-	self:RegisterMessage("PB_CLEARED_ASSIGNMENTS", "UpdateFrame")
+	self:RegisterMessage("PB_ASSIGNMENTS_UPDATED", "UpdateFrame")
 	
 	self:ScanGroup()
 	self:UpdateClassFrames()
@@ -123,14 +122,42 @@ function Buff:PLAYER_REGEN_ENABLED()
 	end
 end
 
+-- Get the units class, including the class translation if it's a Pet
+function Buff:GetUnitClass(unit, skipOffline)
+	-- Not a pet
+	if( UnitIsPlayer(unit) ) then
+		-- We should not skip our offline check, and we should not wait for offline people.
+		if( not skipOffline and not PaladinBuffer.db.profile.offline and not UnitIsConnected(unit) ) then
+			return nil 
+		end
+		
+		return select(2, UnitClass(unit))
+	end
+	
+	local family = UnitCreatureFamily(unit)
+	
+	-- Make sure we want to merge pets into here, also that the pet exists annnnnnnd that it's not a water elemental
+	if( not PaladinBuffer.db.profile.mergePets or not family or not UnitExists(unit) or UnitName(unit) == L["Water Elemental"] ) then
+		return nil
+	-- Check for class overrides
+	elseif( family == L["Felguard"] or family == L["Voidwalker"] ) then
+		return "WARRIOR"
+	elseif( family == L["Succubus"] or family == L["Felhunter"] ) then
+		return "WARLOCK"
+	else
+		return select(2, UnitClass(unit))
+	end
+end
+
 -- Update if we have people in or out of range
 function Buff:UpdateColorStatus(frame, filter)
 	local hasSingleOOR, lowestSingle, hasSingleMissing
 	local hasGreaterCast, hasGreaterOOR, lowestGreater, hasGreaterMissing	
 	
+	-- Check group roster
 	for name, unit in pairs(groupRoster) do
-		local classToken = select(2, UnitClass(unit))
-		if( ( classToken == filter or filter == "ALL" ) and ( PaladinBuffer.db.profile.offline or UnitIsConnected(unit) ) ) then
+		local classToken = self:GetUnitClass(unit)			
+		if( classToken == filter or filter == "ALL" ) then
 			local greaterBlessing = PaladinBuffer.blessings[assignments[classToken]]
 			
 			-- Are we assigned to cast a single on this person?
@@ -166,7 +193,7 @@ function Buff:UpdateColorStatus(frame, filter)
 			end
 		end
 	end
-	
+		
 	local needRecast
 	local time = GetTime()
 	if( hasGreaterMissing ) then
@@ -243,7 +270,7 @@ function Buff:FindClosetToBuff(classFilter)
 	local blessingName = PaladinBuffer.blessings[blessingToken]
 	local closetInRange, closetOnline
 	for name, unit in pairs(groupRoster) do
-		local classToken = select(2, UnitClass(unit))
+		local classToken = self:GetUnitClass(unit, true)			
 		if( classToken == classFilter ) then
 			if( IsSpellInRange(blessingName, unit) == 1 and not UnitIsDeadOrGhost(unit) ) then
 				closetInRange = unit
@@ -294,8 +321,8 @@ function Buff:FindLowestTime(classFilter, blessingName)
 	local lowestTime, inSpellRange, spellDuration
 	
 	for name, unit in pairs(groupRoster) do
-		local classToken = select(2, UnitClass(unit))
-		if( classToken == classFilter and ( PaladinBuffer.db.profile.offline or UnitIsConnected(unit) ) and not assignments[name] ) then
+		local classToken = self:GetUnitClass(unit)			
+		if( classToken == classFilter and not assignments[name] ) then
 			classTotal = classTotal + 1
 			
 			-- We need an initial target, so we have to make sure at least one person is within range of us
@@ -554,21 +581,12 @@ local function updatePopoutDuration(self)
 		self.duration:SetText(L["Offline"])
 	else
 		local seconds = Buff:GetBuffTimeLeft(self.unit, name, self.classToken)
-		if( seconds ) then
+		if( seconds and seconds > 0 ) then
 			Buff:FormatTime(self.duration, seconds)
 		else
 			self.duration:SetText(L["None"])
 		end
 	end
-end
-
-local function popoutOnShow(self)
-	-- Owner name
-	local name = (UnitName(self.unit)) or UNKNOWN
-	self.name:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[self.classToken].r, 255 * RAID_CLASS_COLORS[self.classToken].g, 255 * RAID_CLASS_COLORS[self.classToken].b, name)
-	self.playerName = name
-
-	updatePopoutDuration(self)
 end
 
 local function popoutPreClick(self)
@@ -615,23 +633,48 @@ local function popoutOnUpdate(self, elapsed)
 			break
 		end
 	end
-		
+	
+	-- Because of the texture used to get a solid color, things will appear brighter than they actually are compared to the main class ones
+	-- so we will reduce the color by around 30% to make it look roughly equal.
+	local colorReduct = 0.60
 	if( IsSpellInRange(assignedName, self.unit) ~= 1 or UnitIsDeadOrGhost(self.unit) ) then
-		self:SetBackdropColor(PaladinBuffer.db.profile.frame.cantRebuff.r, PaladinBuffer.db.profile.frame.cantRebuff.g, PaladinBuffer.db.profile.frame.cantRebuff.b, 1.0)
+		self:SetBackdropColor(PaladinBuffer.db.profile.frame.cantRebuff.r * colorReduct, PaladinBuffer.db.profile.frame.cantRebuff.g * colorReduct, PaladinBuffer.db.profile.frame.cantRebuff.b * colorReduct, 1.0)
 	elseif( ( type == "greater" and secondsLeft < PaladinBuffer.db.profile.greaterThreshold ) or ( type == "single" and secondsLeft < PaladinBuffer.db.profile.singleThreshold ) ) then
-		self:SetBackdropColor(PaladinBuffer.db.profile.frame.needRebuff.r, PaladinBuffer.db.profile.frame.needRebuff.g, PaladinBuffer.db.profile.frame.needRebuff.b, 1.0)
+		self:SetBackdropColor(PaladinBuffer.db.profile.frame.needRebuff.r * colorReduct, PaladinBuffer.db.profile.frame.needRebuff.g * colorReduct, PaladinBuffer.db.profile.frame.needRebuff.b * colorReduct, 1.0)
 	else
-		self:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r, PaladinBuffer.db.profile.frame.background.g, PaladinBuffer.db.profile.frame.background.b, 1.0)
+		self:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r * colorReduct, PaladinBuffer.db.profile.frame.background.g * colorReduct, PaladinBuffer.db.profile.frame.background.b * colorReduct, 1.0)
 	end
 end
 
+local function popoutOnShow(self)
+	-- Owner name
+	local name = (UnitName(self.unit)) or UNKNOWN
+	self.name:SetFormattedText("|cff%02x%02x%02x%s|r", 255 * RAID_CLASS_COLORS[self.classToken].r, 255 * RAID_CLASS_COLORS[self.classToken].g, 255 * RAID_CLASS_COLORS[self.classToken].b, name)
+	self.playerName = name
+
+	updatePopoutDuration(self)
+	popoutOnUpdate(self, 2)
+end
+
 function Buff:CreatePopoutFrame(parent)
+	if( not self.popoutBackdrop ) then
+		self.popoutBackdrop = {
+			bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+			edgeFile = "Interface\\ChatFrame\\ChatFrameBackground",
+			tile = false,
+			edgeSize = 0.8,
+			tileSize = 5,
+			insets = {left = 0, right = 0, top = 0, bottom = 0}
+		}
+	end
+	
 	local frame = CreateFrame("Button", nil, parent, "SecureActionButtonTemplate,SecureHandlerShowHideTemplate")
 	frame:SetClampedToScreen(true)
-	frame:SetFrameStrata("MEDIUM")
-	frame:SetHeight(28)
+	frame:SetFrameStrata("HIGH")
+	frame:SetToplevel(true)
+	frame:SetHeight(32)
 	frame:SetWidth(65)
-	frame:SetBackdrop(self.backdrop)
+	frame:SetBackdrop(self.popoutBackdrop)
 	frame:SetBackdropColor(PaladinBuffer.db.profile.frame.background.r, PaladinBuffer.db.profile.frame.background.g, PaladinBuffer.db.profile.frame.background.b, 1.0)
 	frame:SetBackdropBorderColor(PaladinBuffer.db.profile.frame.border.r, PaladinBuffer.db.profile.frame.border.g, PaladinBuffer.db.profile.frame.border.b, 1.0)
 	frame:RegisterForClicks("AnyDown")
@@ -642,13 +685,13 @@ function Buff:CreatePopoutFrame(parent)
 	frame:Hide()
 	
 	frame.name = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	frame.name:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, 0)
-	frame.name:SetWidth(65)
+	frame.name:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+	frame.name:SetWidth(62)
 	frame.name:SetHeight(11)
 	frame.name:SetJustifyH("LEFT")
 
 	frame.duration = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	frame.duration:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -3)
+	frame.duration:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -4)
 	
 	return frame
 end
@@ -656,13 +699,13 @@ end
 function Buff:BuildPopoutBar(parent)
 	for _, frame in pairs(parent.popout) do frame:Hide() end
 	
-	local onShow, onHide = "self:RegisterAutoHide(0.25) \n self:AddToAutoHide(self:GetFrameRef('parent'))", ""
+	local onShow, onHide = "self:RegisterAutoHide(0.20) \n self:AddToAutoHide(self:GetFrameRef('parent'))", ""
 	local newPop = true
 	local used = 0
 	
 	-- Create the group thingys
 	for name, unit in pairs(groupRoster) do
-		local classToken = select(2, UnitClass(unit))
+		local classToken = self:GetUnitClass(unit)			
 		if( classToken == parent.filter ) then
 			used = used + 1
 			local popFrame = parent.popout[used]
@@ -815,13 +858,16 @@ local function PreClick(self, mouse)
 end
 
 function Buff:CreateSingleFrame(parent)
-	self.backdrop = self.backdrop or {bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-		edgeFile = "Interface\\ChatFrame\\ChatFrameBackground",
-		tile = false,
-		edgeSize = 0.8,
-		tileSize = 5,
-		insets = {left = 0, right = 0, top = 0, bottom = 0}
-	}
+	if( not self.backdrop ) then
+		self.backdrop = {
+			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+			edgeFile = "Interface\\ChatFrame\\ChatFrameBackground",
+			tile = false,
+			edgeSize = 0.8,
+			tileSize = 5,
+			insets = {left = 0, right = 0, top = 0, bottom = 0}
+		}
+	end
 
 	local frame = CreateFrame("Button", nil, parent or UIParent, "SecureActionButtonTemplate,SecureHandlerEnterLeaveTemplate")
 	frame:SetClampedToScreen(true)
@@ -973,8 +1019,8 @@ function Buff:UpdateClassFrames()
 	
 	-- Now scan the group and create/update any frames if needed
 	for name, unit in pairs(groupRoster) do
-		local class, classToken = UnitClass(unit)
-		if( class and classToken ) then
+		local classToken = self:GetUnitClass(unit)			
+		if( classToken ) then
 			if( not classFrames[classToken] or not classFrames[classToken].wasUpdated ) then
 				local frame = classFrames[classToken]
 				if( not frame ) then
@@ -1129,6 +1175,6 @@ function Buff:FormatTime(text, timeLeft)
 	elseif( minutes > 0 ) then
 		text:SetFormattedText("%dm", minutes)
 	else
-		text:SetFormattedText("%02ds", timeLeft > 0 and timeLeft or 0)
+		text:SetFormattedText("%ds", timeLeft > 0 and timeLeft or 0)
 	end
 end

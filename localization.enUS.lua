@@ -20,6 +20,13 @@ PaladinBufferLocals = {
 	["gsanct"] = "S",
 	["gwisdom"] = "W",
 	
+	-- Pet names
+	["Felguard"] = "Felguard",
+	["Voidwalker"] = "Voidwalker",
+	["Succubus"] = "Succubus",
+	["Felhunter"] = "Felhunter",
+	["Water Elemental"] = "Water Elemental",
+	
 	-- Slash commands
 	["Slash commands"] = "Slash commands",
 	["/pb assign - Shows the assignment interface."] = "/pb assign - Shows the assignment interface.",
@@ -64,6 +71,9 @@ PaladinBufferLocals = {
 	
 	["Require leader or assist to change assignments"] = "Require leader or assist to change assignments",
 	["Only accepts assignments from people who have either assist or leader, this does NOT apply to parties where any Paladin can change them."] = "Only accepts assignments from people who have either assist or leader, this does NOT apply to parties where any Paladin can change them.",
+	
+	["Merge pets into their buff class"] = "Merge pets into their buff class",
+	["Pets will be shown in the buff frame under the class that they receive greater buffs for, the pet is basically shown as another player.\n\nThis is the following:\nHunter pets -> Warriors\nDeath Knight pets -> Rogues\nFelguard/Voidwalker -> Warriors\nSuccubus/Felhunter -> Warlocks"] = "Pets will be shown in the buff frame under the class that they receive greater buffs for, the pet is basically shown as another player.\n\nThis is the following:\nHunter pets -> Warriors\nDeath Knight pets -> Rogues\nFelguard/Voidwalker -> Warriors\nSuccubus/Felhunter -> Warlocks",
 	
 	["Enable mod inside"] = "Enable mod inside",
 	["Allows you to choose which scenarios this mod should be enabled in."] = "Allows you to choose which scenarios this mod should be enabled in.",
