@@ -377,7 +377,7 @@ function PaladinBuffer:ScanGroup()
 	-- Not in a raid, so scan party
 	if( GetNumRaidMembers() == 0 ) then
 		for i=1, GetNumPartyMembers() do
-			self:LoadUnit(partyUnits[i])
+			loadUnit(partyUnits[i])
 		
 			hasGroupRank[UnitName(partyUnits[i])] = true
 		end
